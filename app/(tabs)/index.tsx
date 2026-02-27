@@ -15,19 +15,51 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as FileSystem from "expo-file-system";
 import Colors from "@/constants/colors";
+import { getApiUrl } from "@/lib/query-client";
 
 type Message = {
   id: string;
   text: string;
   isUser: boolean;
   photoUri?: string;
+  isLoading?: boolean;
 };
 
-const STATIC_REPLY =
-  "Hello! I'm Bigerlo assistant. I've received your message and I'm here to help. (API connection coming soon)";
-
 const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
+
+async function analyzeWithGemini(
+  message: string,
+  photoUri?: string | null
+): Promise<string> {
+  let imageBase64: string | undefined;
+  let mimeType: string | undefined;
+
+  if (photoUri && Platform.OS !== "web") {
+    imageBase64 = await FileSystem.readAsStringAsync(photoUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    mimeType = "image/jpeg";
+  }
+
+  const base = getApiUrl();
+  const url = new URL("/api/analyze", base).toString();
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, imageBase64, mimeType }),
+  });
+
+  const data = (await response.json()) as { text?: string; error?: string };
+
+  if (!response.ok) {
+    throw new Error(data.error ?? "İstek başarısız oldu.");
+  }
+
+  return data.text ?? "Yanıt alınamadı.";
+}
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -36,6 +68,7 @@ export default function HomeScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const inputRef = useRef<TextInput>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -64,27 +97,58 @@ export default function HomeScreen() {
     setCameraOpen(false);
   }, []);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || isSending) return;
 
     if (!chatMode) setChatMode(true);
+
+    const capturedPhoto = photoUri;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       text,
       isUser: true,
-    };
-    const botMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      text: STATIC_REPLY,
-      isUser: false,
+      photoUri: capturedPhoto ?? undefined,
     };
 
-    setMessages((prev) => [botMsg, userMsg, ...prev]);
+    const loadingId = (Date.now() + 1).toString();
+    const loadingMsg: Message = {
+      id: loadingId,
+      text: "Analiz ediliyor…",
+      isUser: false,
+      isLoading: true,
+    };
+
+    setMessages((prev) => [loadingMsg, userMsg, ...prev]);
     setInputText("");
+    setPhotoUri(null);
+    setIsSending(true);
     inputRef.current?.focus();
-  }, [inputText, chatMode]);
+
+    try {
+      const responseText = await analyzeWithGemini(text, capturedPhoto);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingId
+            ? { ...m, text: responseText, isLoading: false }
+            : m
+        )
+      );
+    } catch (err) {
+      const errMsg =
+        err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingId
+            ? { ...m, text: errMsg, isLoading: false }
+            : m
+        )
+      );
+    } finally {
+      setIsSending(false);
+    }
+  }, [inputText, chatMode, photoUri, isSending]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
@@ -101,10 +165,18 @@ export default function HomeScreen() {
           item.isUser ? styles.userBubble : styles.assistantBubble,
         ]}
       >
+        {item.photoUri && (
+          <Image
+            source={{ uri: item.photoUri }}
+            style={styles.messagePhoto}
+            resizeMode="cover"
+          />
+        )}
         <Text
           style={[
             styles.messageText,
             item.isUser ? styles.userText : styles.assistantText,
+            item.isLoading && styles.loadingText,
           ]}
         >
           {item.text}
@@ -122,6 +194,7 @@ export default function HomeScreen() {
             style={styles.chatHeaderBtn}
             onPress={handleCameraPress}
             activeOpacity={0.75}
+            testID="camera-btn"
           >
             <Ionicons
               name="camera-outline"
@@ -134,6 +207,7 @@ export default function HomeScreen() {
             style={styles.chatHeaderBtn}
             onPress={handleNewChat}
             activeOpacity={0.75}
+            testID="new-chat-btn"
           >
             <Ionicons
               name="create-outline"
@@ -162,6 +236,7 @@ export default function HomeScreen() {
             style={styles.card}
             activeOpacity={0.92}
             onPress={handleCameraPress}
+            testID="camera-card"
           >
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photoPreview} />
@@ -187,33 +262,56 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         />
 
+        {photoUri && chatMode && (
+          <View style={styles.photoAttachRow}>
+            <Image
+              source={{ uri: photoUri }}
+              style={styles.photoThumb}
+              resizeMode="cover"
+            />
+            <TouchableOpacity
+              style={styles.removePhotoBtn}
+              onPress={() => setPhotoUri(null)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
           <TextInput
             ref={inputRef}
             style={styles.textInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Message..."
+            placeholder="Mesajınızı yazın..."
             placeholderTextColor={Colors.textSecondary}
             multiline
             maxLength={500}
             returnKeyType="send"
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
+            testID="message-input"
           />
           <TouchableOpacity
             style={[
               styles.sendButton,
-              !inputText.trim() && styles.sendButtonDisabled,
+              (!inputText.trim() || isSending) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isSending}
             activeOpacity={0.8}
+            testID="send-btn"
           >
             <Ionicons
               name="arrow-up"
               size={18}
-              color={inputText.trim() ? Colors.white : Colors.textSecondary}
+              color={
+                inputText.trim() && !isSending
+                  ? Colors.white
+                  : Colors.textSecondary
+              }
             />
           </TouchableOpacity>
         </View>
@@ -380,6 +478,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderBottomLeftRadius: 5,
   },
+  messagePhoto: {
+    width: 180,
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
   messageText: {
     fontSize: 15,
     lineHeight: 21,
@@ -389,6 +493,24 @@ const styles = StyleSheet.create({
   },
   assistantText: {
     color: Colors.textPrimary,
+  },
+  loadingText: {
+    opacity: 0.55,
+  },
+
+  photoAttachRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+    gap: 8,
+  },
+  photoThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+  },
+  removePhotoBtn: {
+    padding: 2,
   },
 
   inputRow: {

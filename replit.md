@@ -16,7 +16,11 @@ A minimal iOS-style mobile web application built with Expo + React Native.
 - Full-screen camera modal: opens on camera icon tap, X button to close, large white circular capture button at bottom
 - Chat area below card: ChatGPT-style message bubbles (user: right/black, assistant: left/gray)
 - Fixed chat input with send button at the bottom
-- Static assistant reply (API integration pending)
+- Gemini Vision API integration (gemini-2.0-flash model)
+- Photo captured by camera is sent with the message to Gemini for analysis
+- System prompt: Bigerlo kozmetik/temizlik uzmanı (INCI analizi, Türkçe yanıt)
+- "Analiz ediliyor…" loading state while API call is in progress
+- Photo thumbnail preview in input bar (chat mode) + full image in user bubble
 
 ### Bottom Navigation (`app/(tabs)/_layout.tsx`)
 - 4 tabs: Home, Chat, History, Shop
@@ -48,7 +52,9 @@ Colors (`constants/colors.ts`):
 - expo-glass-effect + NativeTabs (iOS 26+ liquid glass)
 - react-native-keyboard-controller (KeyboardAvoidingView for chat)
 - @expo/vector-icons Ionicons (all icons)
-- @tanstack/react-query (ready for API integration)
+- @tanstack/react-query (server state)
+- expo-file-system (base64 image encoding for Gemini)
+- Google Gemini Vision API (gemini-2.0-flash, GEMINI_API_KEY secret)
 
 ## Workflows
 
