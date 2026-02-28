@@ -37,7 +37,7 @@ async function analyzeWithGemini(
   let mimeType: string | undefined;
 
   if (photoUri && Platform.OS !== "web") {
-    imageBase64 = await FileSystem.readAsStringAsync(photoUri, {
+    const imageBase64 = await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.Base64,
     });
     mimeType = "image/jpeg";
