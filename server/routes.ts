@@ -5,7 +5,7 @@ const SYSTEM_PROMPT =
   "Sen Bigerlo adında bir kozmetik ve temizlik ürünleri uzmanısın. Görüntüdeki ürünleri tanı, INCI içeriklerini oku ve kullanıcının sorusuna göre sade ve anlaşılır Türkçe analiz yap. Tıbbi teşhis koyma, sadece içerik bazlı bilgilendirme yap.";
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
 
 let lastGeminiCall = 0;
 
@@ -19,6 +19,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     if (!message) {
       res.status(400).json({ error: "message is required" });
+      return;
+    }
+
+    if (!imageBase64) {
+      res.status(400).json({ error: "imageBase64 is required" });
+      return;
+    }
+
+    const base64SizeBytes = (imageBase64.length * 3) / 4;
+    if (base64SizeBytes > 3 * 1024 * 1024) {
+      res.status(413).json({ error: "Fotoğraf çok büyük. Lütfen 3MB altında bir görsel gönderin." });
       return;
     }
 
