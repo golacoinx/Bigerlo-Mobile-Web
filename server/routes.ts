@@ -7,6 +7,8 @@ const SYSTEM_PROMPT =
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent";
 
+let lastGeminiCall = 0;
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/analyze", async (req, res) => {
     const { message, imageBase64, mimeType } = req.body as {
@@ -52,32 +54,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     };
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini API error:", errText);
-      if (response.status === 429) {
-        res.status(429).json({ error: "Çok fazla istek gönderildi. Lütfen bir dakika bekleyip tekrar deneyin." });
-      } else {
-        res.status(502).json({ error: "API isteği başarısız oldu. Lütfen tekrar deneyin." });
-      }
-      return;
+    const now = Date.now();
+    if (now - lastGeminiCall < 2000) {
+      return res.status(429).json({ error: "Çok hızlı istek. Lütfen bekleyin." });
     }
+    lastGeminiCall = now;
 
-    const data = (await response.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
+    try {
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-    const text =
-      data.candidates?.[0]?.content?.parts?.[0]?.text ??
-      "Yanıt alınamadı. Lütfen tekrar deneyin.";
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("Gemini API error:", errText);
+        if (response.status === 429) {
+          return res.status(429).json({ error: "Çok fazla istek gönderildi. Lütfen bir dakika bekleyip tekrar deneyin." });
+        }
+        return res.status(502).json({ error: "API isteği başarısız oldu. Lütfen tekrar deneyin." });
+      }
 
-    res.json({ text });
+      const data = (await response.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+
+      const text =
+        data.candidates?.[0]?.content?.parts?.[0]?.text ??
+        "Yanıt alınamadı. Lütfen tekrar deneyin.";
+
+      return res.json({ text });
+    } catch (err) {
+      console.error("Gemini fetch error:", err);
+      return res.status(502).json({ error: "API isteği başarısız oldu. Lütfen tekrar deneyin." });
+    }
   });
 
   const httpServer = createServer(app);
