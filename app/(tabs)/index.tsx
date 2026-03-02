@@ -10,13 +10,17 @@ import {
   Image,
   Platform,
   StatusBar,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImageManipulator from "expo-image-manipulator";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
+
+const SCAN_BOX_SIZE = 280;
 
 type Message = {
   id: string;
@@ -66,6 +70,7 @@ export default function HomeScreen() {
   const [isSending, setIsSending] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const inputRef = useRef<TextInput>(null);
+  const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
@@ -82,13 +87,35 @@ export default function HomeScreen() {
   }, [permission, requestPermission]);
 
   const handleCapture = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastCaptureRef.current < 2000) return;
+    lastCaptureRef.current = now;
+
     if (!cameraRef.current) return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: true });
-      if (photo?.uri) {
-        setPhotoUri(photo.uri);
-        setPhotoBase64(photo.base64 ?? null);
-      }
+      const photo = await cameraRef.current.takePictureAsync({ quality: 1, base64: false });
+      if (!photo?.uri) return;
+
+      const screen = Dimensions.get("window");
+      const scaleX = photo.width / screen.width;
+      const scaleY = photo.height / screen.height;
+      const cropSize = SCAN_BOX_SIZE * Math.min(scaleX, scaleY);
+      const originX = (photo.width - cropSize) / 2;
+      const originY = (photo.height - cropSize) / 2;
+
+      const targetSize = Math.min(cropSize, 1024);
+
+      const result = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [
+          { crop: { originX, originY, width: cropSize, height: cropSize } },
+          { resize: { width: targetSize, height: targetSize } },
+        ],
+        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+
+      setPhotoUri(result.uri);
+      setPhotoBase64(result.base64 ?? null);
     } catch (e) {}
     setCameraOpen(false);
   }, []);
@@ -355,6 +382,21 @@ function CameraFullScreen({
         facing="back"
       />
 
+      <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
+        <View style={styles.scanOverlayTop} />
+        <View style={styles.scanOverlayMiddle}>
+          <View style={styles.scanOverlaySide} />
+          <View style={styles.scanBox}>
+            <View style={[styles.scanCorner, styles.scanCornerTL]} />
+            <View style={[styles.scanCorner, styles.scanCornerTR]} />
+            <View style={[styles.scanCorner, styles.scanCornerBL]} />
+            <View style={[styles.scanCorner, styles.scanCornerBR]} />
+          </View>
+          <View style={styles.scanOverlaySide} />
+        </View>
+        <View style={styles.scanOverlayBottom} />
+      </View>
+
       <TouchableOpacity
         style={[styles.closeButton, { top: topPadding + 12 }]}
         onPress={onClose}
@@ -584,5 +626,59 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderWidth: 2.5,
     borderColor: "rgba(0,0,0,0.1)",
+  },
+
+  scanOverlayTop: {
+    width: "100%",
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  scanOverlayMiddle: {
+    flexDirection: "row",
+    height: SCAN_BOX_SIZE,
+  },
+  scanOverlaySide: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  scanBox: {
+    width: SCAN_BOX_SIZE,
+    height: SCAN_BOX_SIZE,
+  },
+  scanOverlayBottom: {
+    width: "100%",
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  scanCorner: {
+    position: "absolute",
+    width: 24,
+    height: 24,
+    borderColor: "#3B82F6",
+    borderWidth: 3,
+  },
+  scanCornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+  },
+  scanCornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+  },
+  scanCornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+  },
+  scanCornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
   },
 });
