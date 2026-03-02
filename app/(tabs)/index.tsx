@@ -15,7 +15,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as FileSystem from "expo-file-system";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 
@@ -31,16 +30,11 @@ const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
 
 async function analyzeWithGemini(
   message: string,
-  photoUri?: string | null
+  imageBase64?: string | null
 ): Promise<string> {
-  let imageBase64: string | undefined;
-  let mimeType: string | undefined;
-
-  if (photoUri && Platform.OS !== "web") {
-    const imageBase64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    mimeType = "image/jpeg";
+  if (!imageBase64) {
+    console.error("analyzeWithGemini: imageBase64 eksik, API çağrısı iptal edildi.");
+    throw new Error("Fotoğraf verisi bulunamadı. Lütfen tekrar çekin.");
   }
 
   const base = getApiUrl();
@@ -49,7 +43,7 @@ async function analyzeWithGemini(
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, imageBase64, mimeType }),
+    body: JSON.stringify({ message, imageBase64, mimeType: "image/jpeg" }),
   });
 
   const data = (await response.json()) as { text?: string; error?: string };
@@ -66,6 +60,7 @@ export default function HomeScreen() {
   const [chatMode, setChatMode] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -89,9 +84,10 @@ export default function HomeScreen() {
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current) return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: true });
       if (photo?.uri) {
         setPhotoUri(photo.uri);
+        setPhotoBase64(photo.base64 ?? null);
       }
     } catch (e) {}
     setCameraOpen(false);
@@ -104,6 +100,7 @@ export default function HomeScreen() {
     if (!chatMode) setChatMode(true);
 
     const capturedPhoto = photoUri;
+    const capturedBase64 = photoBase64;
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -123,11 +120,12 @@ export default function HomeScreen() {
     setMessages((prev) => [loadingMsg, userMsg, ...prev]);
     setInputText("");
     setPhotoUri(null);
+    setPhotoBase64(null);
     setIsSending(true);
     inputRef.current?.focus();
 
     try {
-      const responseText = await analyzeWithGemini(text, capturedPhoto);
+      const responseText = await analyzeWithGemini(text, capturedBase64);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
@@ -148,7 +146,7 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [inputText, chatMode, photoUri, isSending]);
+  }, [inputText, chatMode, photoUri, photoBase64, isSending]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
