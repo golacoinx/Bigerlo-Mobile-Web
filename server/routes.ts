@@ -2,10 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "node:http";
 
 const SYSTEM_PROMPT =
-  "Sen Bigerlo adında bir kozmetik ve temizlik ürünleri uzmanısın. Görüntüdeki ürünleri tanı, INCI içeriklerini oku ve kullanıcının sorusuna göre sade ve anlaşılır Türkçe analiz yap. Tıbbi teşhis koyma, sadece içerik bazlı bilgilendirme yap.";
+  "Bigerlo kozmetik/temizlik ürünleri asistanısın. Görüntüdeki ürünü tanı, içerikleri kısaca Türkçe açıkla. Tıbbi tavsiye verme.";
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
 
 let lastGeminiCall = 0;
 
@@ -61,7 +61,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 512,
       },
     };
 

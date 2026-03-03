@@ -103,7 +103,7 @@ export default function HomeScreen() {
       const originX = (photo.width - cropSize) / 2;
       const originY = (photo.height - cropSize) / 2;
 
-      const targetSize = Math.min(cropSize, 1024);
+      const targetSize = Math.min(cropSize, 800);
 
       const result = await ImageManipulator.manipulateAsync(
         photo.uri,
@@ -111,7 +111,7 @@ export default function HomeScreen() {
           { crop: { originX, originY, width: cropSize, height: cropSize } },
           { resize: { width: targetSize, height: targetSize } },
         ],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        { compress: 0.3, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
 
       setPhotoUri(result.uri);
