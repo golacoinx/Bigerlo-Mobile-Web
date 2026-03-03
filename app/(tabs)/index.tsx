@@ -111,7 +111,7 @@ export default function HomeScreen() {
           { crop: { originX, originY, width: cropSize, height: cropSize } },
           { resize: { width: targetSize, height: targetSize } },
         ],
-        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
 
       setPhotoUri(result.uri);
@@ -215,18 +215,6 @@ export default function HomeScreen() {
     <View style={[styles.container, { paddingTop: topPadding }]}>
       {chatMode ? (
         <View style={styles.chatHeader}>
-          <TouchableOpacity
-            style={styles.chatHeaderBtn}
-            onPress={handleCameraPress}
-            activeOpacity={0.75}
-            testID="camera-btn"
-          >
-            <Ionicons
-              name="camera-outline"
-              size={18}
-              color={Colors.textPrimary}
-            />
-          </TouchableOpacity>
           <View style={styles.chatHeaderSpacer} />
           <TouchableOpacity
             style={styles.chatHeaderBtn}
@@ -256,25 +244,6 @@ export default function HomeScreen() {
         behavior="padding"
         keyboardVerticalOffset={0}
       >
-        {!chatMode && (
-          <TouchableOpacity
-            style={styles.card}
-            activeOpacity={0.92}
-            onPress={handleCameraPress}
-            testID="camera-card"
-          >
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-            ) : (
-              <Ionicons
-                name="camera-outline"
-                size={20}
-                color={Colors.textSecondary}
-              />
-            )}
-          </TouchableOpacity>
-        )}
-
         <FlatList
           data={messages}
           renderItem={renderMessage}
@@ -287,38 +256,50 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         />
 
-        {photoUri && chatMode && (
+        {photoUri && (
           <View style={styles.photoAttachRow}>
-            <Image
-              source={{ uri: photoUri }}
-              style={styles.photoThumb}
-              resizeMode="cover"
-            />
-            <TouchableOpacity
-              style={styles.removePhotoBtn}
-              onPress={() => setPhotoUri(null)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
-            </TouchableOpacity>
+            <View style={styles.photoThumbWrapper}>
+              <Image
+                source={{ uri: photoUri }}
+                style={styles.photoThumb}
+                resizeMode="cover"
+              />
+              <TouchableOpacity
+                style={styles.removePhotoBtn}
+                onPress={() => { setPhotoUri(null); setPhotoBase64(null); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close-circle" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
         <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
-          <TextInput
-            ref={inputRef}
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Mesajınızı yazın..."
-            placeholderTextColor={Colors.textSecondary}
-            multiline
-            maxLength={500}
-            returnKeyType="send"
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-            testID="message-input"
-          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              ref={inputRef}
+              style={styles.textInput}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder="Mesajınızı yazın..."
+              placeholderTextColor={Colors.textSecondary}
+              multiline
+              maxLength={500}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              testID="message-input"
+            />
+            <TouchableOpacity
+              style={styles.cameraInlineBtn}
+              onPress={handleCameraPress}
+              activeOpacity={0.7}
+              testID="camera-btn"
+            >
+              <Ionicons name="camera-outline" size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -542,35 +523,59 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 6,
-    gap: 8,
+    paddingHorizontal: 2,
+  },
+  photoThumbWrapper: {
+    position: "relative",
   },
   photoThumb: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+    width: 64,
+    height: 64,
+    borderRadius: 14,
   },
   removePhotoBtn: {
-    padding: 2,
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 10,
+    gap: 8,
     paddingTop: 8,
     paddingHorizontal: 2,
+  },
+  inputContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    backgroundColor: Colors.card,
+    borderRadius: 22,
+    minHeight: 44,
+    maxHeight: 120,
   },
   textInput: {
     flex: 1,
     minHeight: 44,
-    maxHeight: 120,
-    backgroundColor: Colors.card,
-    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 11,
     fontSize: 15,
     color: Colors.textPrimary,
     lineHeight: 21,
+  },
+  cameraInlineBtn: {
+    width: 40,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingRight: 6,
   },
   sendButton: {
     width: 44,
