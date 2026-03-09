@@ -376,7 +376,7 @@ export default function HomeScreen() {
 }
 
 type CameraFullScreenProps = {
-  cameraRef: React.RefObject<CameraView>;
+  cameraRef: React.RefObject<CameraView | null>;
   onCapture: () => void;
   onClose: () => void;
 };
