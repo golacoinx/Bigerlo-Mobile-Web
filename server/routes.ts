@@ -1,11 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "node:http";
+import { getGeminiApiKey } from "./env";
 
 const SYSTEM_PROMPT =
   "Bigerlo kozmetik/temizlik ürünleri asistanısın. Görüntüdeki ürünü tanı, içerikleri kısaca Türkçe açıkla. Tıbbi tavsiye verme.";
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 let lastGeminiCall = 0;
 
@@ -33,9 +34,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return;
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
+    let apiKey: string;
+    try {
+      apiKey = getGeminiApiKey();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GEMINI_API_KEY is not configured";
+      res.status(500).json({ error: message });
       return;
     }
 
