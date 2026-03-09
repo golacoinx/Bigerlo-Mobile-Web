@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as FileSystem from "expo-file-system";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 
@@ -34,7 +35,7 @@ const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
 
 async function analyzeWithGemini(
   message: string,
-  imageBase64?: string | null
+  imageBase64: string
 ): Promise<string> {
   if (!imageBase64) {
     console.error("analyzeWithGemini: imageBase64 eksik, API çağrısı iptal edildi.");
@@ -47,7 +48,7 @@ async function analyzeWithGemini(
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, imageBase64, mimeType: "image/jpeg" }),
+    body: JSON.stringify({ message, imageBase64 }),
   });
 
   const data = (await response.json()) as { text?: string; error?: string };
@@ -116,18 +117,53 @@ export default function HomeScreen() {
 
       setPhotoUri(result.uri);
       setPhotoBase64(result.base64 ?? null);
-    } catch (e) {}
+    } catch {}
     setCameraOpen(false);
   }, []);
 
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
-    if (!text || isSending) return;
+    const capturedPhoto = photoUri;
+    if (isSending) return;
+    if (!text && !capturedPhoto) return;
 
     if (!chatMode) setChatMode(true);
 
-    const capturedPhoto = photoUri;
-    const capturedBase64 = photoBase64;
+    if (!capturedPhoto) {
+      const warningId = Date.now().toString();
+      setMessages((prev) => [
+        {
+          id: warningId,
+          text: "Analiz için lütfen bir fotoğraf ekleyin.",
+          isUser: false,
+        },
+        ...prev,
+      ]);
+      return;
+    }
+
+    let capturedBase64: string | null = null;
+    try {
+      capturedBase64 = await FileSystem.readAsStringAsync(capturedPhoto, {
+        encoding: "base64",
+      });
+    } catch (error) {
+      console.error("Fotoğraf base64 dönüştürme hatası:", error);
+      capturedBase64 = photoBase64;
+    }
+
+    if (!capturedBase64) {
+      const warningId = Date.now().toString();
+      setMessages((prev) => [
+        {
+          id: warningId,
+          text: "Fotoğraf verisi hazırlanamadı. Lütfen fotoğrafı tekrar ekleyin.",
+          isUser: false,
+        },
+        ...prev,
+      ]);
+      return;
+    }
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -303,10 +339,10 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!inputText.trim() || isSending) && styles.sendButtonDisabled,
+              (!(inputText.trim() || photoUri) || isSending) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim() || isSending}
+            disabled={!(inputText.trim() || photoUri) || isSending}
             activeOpacity={0.8}
             testID="send-btn"
           >
@@ -314,7 +350,7 @@ export default function HomeScreen() {
               name="arrow-up"
               size={18}
               color={
-                inputText.trim() && !isSending
+                (inputText.trim() || photoUri) && !isSending
                   ? Colors.white
                   : Colors.textSecondary
               }

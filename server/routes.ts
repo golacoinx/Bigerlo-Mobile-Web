@@ -1,25 +1,23 @@
 import type { Express } from "express";
 import { createServer, type Server } from "node:http";
-import { getGeminiApiKey } from "./env";
 
-const SYSTEM_PROMPT =
-  "Bigerlo kozmetik/temizlik ürünleri asistanısın. Görüntüdeki ürünü tanı, içerikleri kısaca Türkçe açıkla. Tıbbi tavsiye verme.";
+const SYSTEM_PROMPT = `Sen Bigerlo için kozmetik/temizlik ürün analizi yapan asistansın.\n\nKurallar:\n- Selamlama, kapanış veya kendini tanıtma yazma.\n- Yalnızca ürün analizi üret; genel sohbet metni üretme.\n- Görselde ürün okunmuyorsa bunu açıkça belirt ve tahmin yaptığını söyle.\n- Tıbbi tanı veya kesin tedavi önerisi verme.\n\nCevap formatı (başlıklarla, kısa ve net):\n1) Ürün türü\n2) Marka / görünen isim\n3) Etiket / içerik özeti\n4) Ne işe yarar\n5) Dikkat edilmesi gerekenler`;
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
 
 let lastGeminiCall = 0;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/analyze", async (req, res) => {
     const { message, imageBase64, mimeType } = req.body as {
-      message: string;
+      message?: string;
       imageBase64?: string;
       mimeType?: string;
     };
 
-    if (!message) {
-      res.status(400).json({ error: "message is required" });
+    if (typeof message !== "string") {
+      res.status(400).json({ error: "message must be a string" });
       return;
     }
 
@@ -34,29 +32,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return;
     }
 
-    let apiKey: string;
-    try {
-      apiKey = getGeminiApiKey();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "GEMINI_API_KEY is not configured";
-      res.status(500).json({ error: message });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
       return;
     }
 
-    const userParts: object[] = [
-      { text: `${SYSTEM_PROMPT}\n\nKullanıcı mesajı: ${message}` },
-    ];
+    const userParts: object[] = [];
 
-    if (imageBase64 && mimeType) {
+    const resolvedMimeType = mimeType || "image/jpeg";
+
+    if (imageBase64) {
       userParts.push({
         inlineData: {
-          mimeType,
+          mimeType: resolvedMimeType,
           data: imageBase64,
         },
       });
     }
 
+    userParts.push({
+      text: message
+        ? `Kullanıcı bağlamı: ${message}`
+        : "Kullanıcı ek mesaj vermedi. Yalnızca görseldeki ürünü analiz et.",
+    });
+
     const body = {
+      systemInstruction: {
+        parts: [{ text: SYSTEM_PROMPT }],
+      },
       contents: [
         {
           role: "user",
@@ -64,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       ],
       generationConfig: {
-        temperature: 0.7,
+        temperature: 0.2,
         maxOutputTokens: 512,
       },
     };
@@ -95,9 +99,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
       };
 
-      const text =
-        data.candidates?.[0]?.content?.parts?.[0]?.text ??
-        "Yanıt alınamadı. Lütfen tekrar deneyin.";
+      const rawText =
+        data.candidates?.[0]?.content?.parts
+          ?.map((part) => part.text?.trim())
+          .filter((part): part is string => Boolean(part))
+          .join("\n\n") ?? "";
+
+      const text = rawText
+        .replace(/^\s*(Merhaba|Selam|Hi|Hello)[^\n]*\n?/i, "")
+        .trim();
+
+      if (!text) {
+        return res.status(502).json({ error: "Modelden geçerli bir yanıt alınamadı." });
+      }
 
       return res.json({ text });
     } catch (err) {
