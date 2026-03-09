@@ -1,13 +1,26 @@
 import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getRequiredExpoPublicDomain } from "@/lib/env";
+import { getExpoPublicDomain } from "@/lib/env";
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
-  const host = getRequiredExpoPublicDomain();
+  const host = getExpoPublicDomain();
+
+  if (!host) {
+    if (__DEV__) {
+      console.warn(
+        "EXPO_PUBLIC_DOMAIN is missing. Falling back to http://localhost:5000 for development.",
+      );
+      return new URL("http://localhost:5000").href;
+    }
+
+    throw new Error(
+      "API configuration error: EXPO_PUBLIC_DOMAIN is missing. Set it to your API host (example: my-domain.com:5000).",
+    );
+  }
 
   return new URL(`https://${host}`).href;
 }

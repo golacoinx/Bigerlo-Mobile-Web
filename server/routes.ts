@@ -6,7 +6,22 @@ const SYSTEM_PROMPT = `Sen Bigerlo için kozmetik/temizlik ürün analizi yapan 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
 
-let lastGeminiCall = 0;
+const THROTTLE_WINDOW_MS = 2000;
+const lastGeminiCallByClient = new Map<string, number>();
+
+function getClientThrottleKey(req: { ip?: string; header: (name: string) => string | undefined }): string {
+  const forwardedFor = req.header("x-forwarded-for");
+  if (forwardedFor) {
+    const first = forwardedFor.split(",")[0]?.trim();
+    if (first) return first;
+  }
+
+  if (req.ip?.trim()) {
+    return req.ip.trim();
+  }
+
+  return "unknown-client";
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/analyze", async (req, res) => {
@@ -73,11 +88,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     };
 
+    const clientKey = getClientThrottleKey(req);
     const now = Date.now();
-    if (now - lastGeminiCall < 2000) {
+    const lastCall = lastGeminiCallByClient.get(clientKey) ?? 0;
+
+    if (now - lastCall < THROTTLE_WINDOW_MS) {
       return res.status(429).json({ error: "Çok hızlı istek. Lütfen bekleyin." });
     }
-    lastGeminiCall = now;
+    lastGeminiCallByClient.set(clientKey, now);
 
     try {
       const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
