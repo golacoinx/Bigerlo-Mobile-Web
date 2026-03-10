@@ -11,35 +11,47 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 
 const SCAN_BOX_SIZE = 280;
+const MAX_SNAPSHOTS = 5;
+
+type Snapshot = {
+  id: string;
+  uri: string;
+  base64: string;
+  mimeType: string;
+};
 
 type Message = {
   id: string;
   text: string;
   isUser: boolean;
-  photoUri?: string;
+  photoUris?: string[];
   isLoading?: boolean;
+};
+
+type AnalyzeImage = {
+  imageBase64: string;
+  mimeType: string;
 };
 
 const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
 
 async function analyzeWithGemini(
   message: string,
-  imageBase64: string
+  images: AnalyzeImage[]
 ): Promise<string> {
-  if (!imageBase64) {
-    console.error("analyzeWithGemini: imageBase64 eksik, API çağrısı iptal edildi.");
-    throw new Error("Fotoğraf verisi bulunamadı. Lütfen tekrar çekin.");
+  if (!images.length) {
+    throw new Error("Analiz için en az bir fotoğraf gerekli.");
   }
 
   const base = getApiUrl();
@@ -48,7 +60,7 @@ async function analyzeWithGemini(
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, imageBase64 }),
+    body: JSON.stringify({ message, images }),
   });
 
   const data = (await response.json()) as { text?: string; error?: string };
@@ -64,8 +76,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [chatMode, setChatMode] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -78,6 +89,18 @@ export default function HomeScreen() {
   const bottomPadding =
     TAB_BAR_HEIGHT + (Platform.OS === "web" ? 34 : insets.bottom);
 
+  const addSystemMessage = useCallback((text: string) => {
+    const warningId = Date.now().toString();
+    setMessages((prev) => [
+      {
+        id: warningId,
+        text,
+        isUser: false,
+      },
+      ...prev,
+    ]);
+  }, []);
+
   const handleCameraPress = useCallback(async () => {
     if (!permission) return;
     if (!permission.granted) {
@@ -88,13 +111,22 @@ export default function HomeScreen() {
   }, [permission, requestPermission]);
 
   const handleCapture = useCallback(async () => {
+    if (snapshots.length >= MAX_SNAPSHOTS) {
+      addSystemMessage(`En fazla ${MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
+      return;
+    }
+
     const now = Date.now();
-    if (now - lastCaptureRef.current < 2000) return;
+    if (now - lastCaptureRef.current < 1200) return;
     lastCaptureRef.current = now;
 
     if (!cameraRef.current) return;
+
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 1, base64: false });
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 1,
+        base64: false,
+      });
       if (!photo?.uri) return;
 
       const screen = Dimensions.get("window");
@@ -112,64 +144,65 @@ export default function HomeScreen() {
           { crop: { originX, originY, width: cropSize, height: cropSize } },
           { resize: { width: targetSize, height: targetSize } },
         ],
-        { compress: 0.3, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        {
+          compress: 0.3,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true,
+        }
       );
 
-      setPhotoUri(result.uri);
-      setPhotoBase64(result.base64 ?? null);
-    } catch {}
-    setCameraOpen(false);
+      const processedBase64 = result.base64;
+      if (!processedBase64) {
+        addSystemMessage("Fotoğraf işlenemedi. Lütfen tekrar deneyin.");
+        return;
+      }
+
+      setSnapshots((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          uri: result.uri,
+          base64: processedBase64,
+          mimeType: "image/jpeg",
+        },
+      ]);
+    } catch {
+      addSystemMessage("Fotoğraf çekilirken bir hata oluştu. Lütfen tekrar deneyin.");
+    }
+  }, [addSystemMessage, snapshots.length]);
+
+  const removeSnapshot = useCallback((snapshotId: string) => {
+    setSnapshots((prev) => prev.filter((snapshot) => snapshot.id !== snapshotId));
   }, []);
 
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
-    const capturedPhoto = photoUri;
+
     if (isSending) return;
-    if (!text && !capturedPhoto) return;
+
+    if (!text) {
+      addSystemMessage("Lütfen bir soru veya analiz notu yazın.");
+      return;
+    }
+
+    if (!snapshots.length) {
+      addSystemMessage("Analiz için en az bir fotoğraf ekleyin.");
+      return;
+    }
 
     if (!chatMode) setChatMode(true);
 
-    if (!capturedPhoto) {
-      const warningId = Date.now().toString();
-      setMessages((prev) => [
-        {
-          id: warningId,
-          text: "Analiz için lütfen bir fotoğraf ekleyin.",
-          isUser: false,
-        },
-        ...prev,
-      ]);
-      return;
-    }
-
-    let capturedBase64: string | null = null;
-    try {
-      capturedBase64 = await FileSystem.readAsStringAsync(capturedPhoto, {
-        encoding: "base64",
-      });
-    } catch (error) {
-      console.error("Fotoğraf base64 dönüştürme hatası:", error);
-      capturedBase64 = photoBase64;
-    }
-
-    if (!capturedBase64) {
-      const warningId = Date.now().toString();
-      setMessages((prev) => [
-        {
-          id: warningId,
-          text: "Fotoğraf verisi hazırlanamadı. Lütfen fotoğrafı tekrar ekleyin.",
-          isUser: false,
-        },
-        ...prev,
-      ]);
-      return;
-    }
+    const userPhotoUris = snapshots.map((snapshot) => snapshot.uri);
+    const images: AnalyzeImage[] = snapshots.map((snapshot) => ({
+      imageBase64: snapshot.base64,
+      mimeType: snapshot.mimeType,
+    }));
 
     const userMsg: Message = {
       id: Date.now().toString(),
       text,
       isUser: true,
-      photoUri: capturedPhoto ?? undefined,
+      photoUris: userPhotoUris,
     };
 
     const loadingId = (Date.now() + 1).toString();
@@ -181,14 +214,14 @@ export default function HomeScreen() {
     };
 
     setMessages((prev) => [loadingMsg, userMsg, ...prev]);
-    setInputText("");
-    setPhotoUri(null);
-    setPhotoBase64(null);
     setIsSending(true);
+    setInputText("");
+    setSnapshots([]);
+    setCameraOpen(false);
     inputRef.current?.focus();
 
     try {
-      const responseText = await analyzeWithGemini(text, capturedBase64);
+      const responseText = await analyzeWithGemini(text, images);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
@@ -209,13 +242,14 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [inputText, chatMode, photoUri, photoBase64, isSending]);
+  }, [addSystemMessage, chatMode, inputText, isSending, snapshots]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
     setInputText("");
     setChatMode(false);
-    setPhotoUri(null);
+    setSnapshots([]);
+    setCameraOpen(false);
   }, []);
 
   const renderMessage = useCallback(
@@ -226,13 +260,23 @@ export default function HomeScreen() {
           item.isUser ? styles.userBubble : styles.assistantBubble,
         ]}
       >
-        {item.photoUri && (
-          <Image
-            source={{ uri: item.photoUri }}
-            style={styles.messagePhoto}
-            resizeMode="cover"
-          />
-        )}
+        {item.photoUris?.length ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.messagePhotoRow}
+            style={styles.messagePhotoScroll}
+          >
+            {item.photoUris.map((uri, idx) => (
+              <Image
+                key={`${item.id}-photo-${idx}`}
+                source={{ uri }}
+                style={styles.messagePhoto}
+                resizeMode="cover"
+              />
+            ))}
+          </ScrollView>
+        ) : null}
         <Text
           style={[
             styles.messageText,
@@ -248,7 +292,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: topPadding }]}>
+    <View style={[styles.container, { paddingTop: topPadding }]}> 
       {chatMode ? (
         <View style={styles.chatHeader}>
           <View style={styles.chatHeaderSpacer} />
@@ -292,26 +336,11 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         />
 
-        {photoUri && (
-          <View style={styles.photoAttachRow}>
-            <View style={styles.photoThumbWrapper}>
-              <Image
-                source={{ uri: photoUri }}
-                style={styles.photoThumb}
-                resizeMode="cover"
-              />
-              <TouchableOpacity
-                style={styles.removePhotoBtn}
-                onPress={() => { setPhotoUri(null); setPhotoBase64(null); }}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close-circle" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        {snapshots.length > 0 ? (
+          <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
+        ) : null}
 
-        <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
+        <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}> 
           <View style={styles.inputContainer}>
             <TextInput
               ref={inputRef}
@@ -339,10 +368,10 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!(inputText.trim() || photoUri) || isSending) && styles.sendButtonDisabled,
+              (!(inputText.trim() && snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!(inputText.trim() || photoUri) || isSending}
+            disabled={!(inputText.trim() && snapshots.length > 0) || isSending}
             activeOpacity={0.8}
             testID="send-btn"
           >
@@ -350,7 +379,7 @@ export default function HomeScreen() {
               name="arrow-up"
               size={18}
               color={
-                (inputText.trim() || photoUri) && !isSending
+                inputText.trim() && snapshots.length > 0 && !isSending
                   ? Colors.white
                   : Colors.textSecondary
               }
@@ -367,7 +396,13 @@ export default function HomeScreen() {
       >
         <CameraFullScreen
           cameraRef={cameraRef}
+          snapshots={snapshots}
+          inputText={inputText}
+          isSending={isSending}
+          onInputTextChange={setInputText}
           onCapture={handleCapture}
+          onRemoveSnapshot={removeSnapshot}
+          onSend={handleSend}
           onClose={() => setCameraOpen(false)}
         />
       </Modal>
@@ -377,13 +412,25 @@ export default function HomeScreen() {
 
 type CameraFullScreenProps = {
   cameraRef: React.RefObject<CameraView | null>;
+  snapshots: Snapshot[];
+  inputText: string;
+  isSending: boolean;
+  onInputTextChange: (value: string) => void;
   onCapture: () => void;
+  onRemoveSnapshot: (id: string) => void;
+  onSend: () => void;
   onClose: () => void;
 };
 
 function CameraFullScreen({
   cameraRef,
+  snapshots,
+  inputText,
+  isSending,
+  onInputTextChange,
   onCapture,
+  onRemoveSnapshot,
+  onSend,
   onClose,
 }: CameraFullScreenProps) {
   const insets = useSafeAreaInsets();
@@ -422,16 +469,103 @@ function CameraFullScreen({
         <Ionicons name="close" size={22} color={Colors.white} />
       </TouchableOpacity>
 
-      <View style={[styles.captureArea, { paddingBottom: bottomPadding + 32 }]}>
-        <TouchableOpacity
-          style={styles.captureButton}
-          onPress={onCapture}
-          activeOpacity={0.85}
-        >
-          <View style={styles.captureButtonInner} />
-        </TouchableOpacity>
+      <View style={[styles.cameraBottomPanel, { paddingBottom: bottomPadding + 12 }]}> 
+        {snapshots.length > 0 ? (
+          <SnapshotStrip snapshots={snapshots} onRemove={onRemoveSnapshot} dark />
+        ) : (
+          <Text style={styles.cameraHint}>Ürünleri sırayla çekin (en fazla {MAX_SNAPSHOTS})</Text>
+        )}
+
+        <View style={styles.cameraInputRow}>
+          <View style={[styles.inputContainer, styles.cameraInputContainer]}>
+            <TextInput
+              style={[styles.textInput, styles.cameraTextInput]}
+              value={inputText}
+              onChangeText={onInputTextChange}
+              placeholder="Örn: Hangisi daha iyi, akneli cilt için uygun mu?"
+              placeholderTextColor="rgba(255,255,255,0.65)"
+              multiline
+              maxLength={500}
+              returnKeyType="send"
+              onSubmitEditing={onSend}
+              blurOnSubmit={false}
+            />
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              styles.cameraSendButton,
+              (!(inputText.trim() && snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
+            ]}
+            onPress={onSend}
+            disabled={!(inputText.trim() && snapshots.length > 0) || isSending}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={
+                inputText.trim() && snapshots.length > 0 && !isSending
+                  ? Colors.white
+                  : Colors.textSecondary
+              }
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.captureArea}>
+          <TouchableOpacity
+            style={styles.captureButton}
+            onPress={onCapture}
+            activeOpacity={0.85}
+            disabled={snapshots.length >= MAX_SNAPSHOTS || isSending}
+          >
+            <View style={styles.captureButtonInner} />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
+  );
+}
+
+function SnapshotStrip({
+  snapshots,
+  onRemove,
+  dark = false,
+}: {
+  snapshots: Snapshot[];
+  onRemove: (id: string) => void;
+  dark?: boolean;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.photoAttachRow}
+    >
+      {snapshots.map((snapshot) => (
+        <View
+          key={snapshot.id}
+          style={[
+            styles.photoThumbWrapper,
+            dark && styles.photoThumbWrapperDark,
+          ]}
+        >
+          <Image
+            source={{ uri: snapshot.uri }}
+            style={styles.photoThumb}
+            resizeMode="cover"
+          />
+          <TouchableOpacity
+            style={styles.removePhotoBtn}
+            onPress={() => onRemove(snapshot.id)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="close-circle" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -492,25 +626,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  card: {
-    height: 110,
-    backgroundColor: Colors.card,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-    overflow: "hidden",
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  photoPreview: {
-    width: "100%",
-    height: "100%",
-  },
-
   messageList: {
     flex: 1,
   },
@@ -520,7 +635,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   messageBubble: {
-    maxWidth: "78%",
+    maxWidth: "82%",
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
@@ -535,11 +650,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderBottomLeftRadius: 5,
   },
-  messagePhoto: {
-    width: 180,
-    height: 180,
-    borderRadius: 12,
+  messagePhotoScroll: {
     marginBottom: 8,
+  },
+  messagePhotoRow: {
+    gap: 6,
+  },
+  messagePhoto: {
+    width: 96,
+    height: 96,
+    borderRadius: 10,
   },
   messageText: {
     fontSize: 15,
@@ -558,11 +678,17 @@ const styles = StyleSheet.create({
   photoAttachRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
     marginBottom: 6,
     paddingHorizontal: 2,
   },
   photoThumbWrapper: {
     position: "relative",
+  },
+  photoThumbWrapperDark: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    padding: 2,
   },
   photoThumb: {
     width: 64,
@@ -640,12 +766,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
-  captureArea: {
+  cameraBottomPanel: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  cameraHint: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  cameraInputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    marginBottom: 14,
+  },
+  cameraInputContainer: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  cameraTextInput: {
+    color: Colors.white,
+  },
+  cameraSendButton: {
+    backgroundColor: Colors.black,
+  },
+  captureArea: {
     alignItems: "center",
+    marginBottom: 6,
   },
   captureButton: {
     width: 76,
