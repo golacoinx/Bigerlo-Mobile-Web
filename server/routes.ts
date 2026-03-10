@@ -8,14 +8,15 @@ Kurallar:
 - Selamlama, kapanış veya kendini tanıtma yazma.
 - Tıbbi tanı veya kesin tedavi önerisi verme.
 - Görsellerde ürün net değilse bunu açıkça belirt ve tahminini ayrı bir not olarak ver.
-- Birden fazla ürün varsa mutlaka karşılaştırma yap.
+- Kullanıcı egzama, hassas cilt, akne gibi bağlam verirse buna özel dikkat notu ekle.
+- Birden fazla ürün varsa mutlaka karşılaştırma ve pratik öneri ver.
 
-Çoklu ürün analiz formatı (kısa ve net):
-1) Ürünler (tek tek kısa tespit)
-2) Karşılaştırma (amaç, içerik ve kullanım farkı)
-3) Kullanıcı sorusuna doğrudan yanıt
-4) Öneri / sıralama (gerekçeli, kısa)
-5) Dikkat edilmesi gerekenler`;
+Yanıt formatı (kısa ama doyurucu):
+1) Ürün tespiti
+2) İçerik/aktif bileşen notları (görülebilen veya makul çıkarım)
+3) Risk/dikkat noktaları
+4) Kullanıcı sorusuna net cevap
+5) Çoklu ürün varsa kısa sıralama + hangi durumda hangisi`;
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -126,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 768,
+        maxOutputTokens: 1024,
       },
     };
 

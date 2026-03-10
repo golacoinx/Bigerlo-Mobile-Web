@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -23,6 +23,9 @@ import { getApiUrl } from "@/lib/query-client";
 
 const SCAN_BOX_SIZE = 280;
 const MAX_SNAPSHOTS = 5;
+
+const PHOTO_ONLY_FALLBACK_PROMPT =
+  "Görsellerdeki ürünleri karşılaştırmalı olarak analiz et. İçerik ve kullanım açısından kısa öneri ver.";
 
 type Snapshot = {
   id: string;
@@ -50,10 +53,6 @@ async function analyzeWithGemini(
   message: string,
   images: AnalyzeImage[]
 ): Promise<string> {
-  if (!images.length) {
-    throw new Error("Analiz için en az bir fotoğraf gerekli.");
-  }
-
   const base = getApiUrl();
   const url = new URL("/api/analyze", base).toString();
 
@@ -82,6 +81,7 @@ export default function HomeScreen() {
   const [isSending, setIsSending] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const inputRef = useRef<TextInput>(null);
+  const listRef = useRef<FlatList<Message>>(null);
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -89,15 +89,22 @@ export default function HomeScreen() {
   const bottomPadding =
     TAB_BAR_HEIGHT + (Platform.OS === "web" ? 34 : insets.bottom);
 
-  const addSystemMessage = useCallback((text: string) => {
-    const warningId = Date.now().toString();
+  useEffect(() => {
+    if (!messages.length) return;
+    const t = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 10);
+    return () => clearTimeout(t);
+  }, [messages]);
+
+  const pushAssistantMessage = useCallback((text: string) => {
     setMessages((prev) => [
+      ...prev,
       {
-        id: warningId,
+        id: `${Date.now()}-assistant`,
         text,
         isUser: false,
       },
-      ...prev,
     ]);
   }, []);
 
@@ -112,7 +119,7 @@ export default function HomeScreen() {
 
   const handleCapture = useCallback(async () => {
     if (snapshots.length >= MAX_SNAPSHOTS) {
-      addSystemMessage(`En fazla ${MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
+      pushAssistantMessage(`En fazla ${MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
       return;
     }
 
@@ -153,7 +160,7 @@ export default function HomeScreen() {
 
       const processedBase64 = result.base64;
       if (!processedBase64) {
-        addSystemMessage("Fotoğraf işlenemedi. Lütfen tekrar deneyin.");
+        pushAssistantMessage("Fotoğraf işlenemedi. Lütfen tekrar deneyin.");
         return;
       }
 
@@ -167,9 +174,9 @@ export default function HomeScreen() {
         },
       ]);
     } catch {
-      addSystemMessage("Fotoğraf çekilirken bir hata oluştu. Lütfen tekrar deneyin.");
+      pushAssistantMessage("Fotoğraf çekilirken bir hata oluştu. Lütfen tekrar deneyin.");
     }
-  }, [addSystemMessage, snapshots.length]);
+  }, [pushAssistantMessage, snapshots.length]);
 
   const removeSnapshot = useCallback((snapshotId: string) => {
     setSnapshots((prev) => prev.filter((snapshot) => snapshot.id !== snapshotId));
@@ -177,35 +184,32 @@ export default function HomeScreen() {
 
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
+    const hasText = Boolean(text);
+    const hasImages = snapshots.length > 0;
 
     if (isSending) return;
-
-    if (!text) {
-      addSystemMessage("Lütfen bir soru veya analiz notu yazın.");
-      return;
-    }
-
-    if (!snapshots.length) {
-      addSystemMessage("Analiz için en az bir fotoğraf ekleyin.");
-      return;
-    }
+    if (!hasText && !hasImages) return;
 
     if (!chatMode) setChatMode(true);
 
-    const userPhotoUris = snapshots.map((snapshot) => snapshot.uri);
-    const images: AnalyzeImage[] = snapshots.map((snapshot) => ({
-      imageBase64: snapshot.base64,
-      mimeType: snapshot.mimeType,
-    }));
-
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-user`,
       text,
       isUser: true,
-      photoUris: userPhotoUris,
+      photoUris: hasImages ? snapshots.map((snapshot) => snapshot.uri) : undefined,
     };
 
-    const loadingId = (Date.now() + 1).toString();
+    setMessages((prev) => [...prev, userMsg]);
+
+    if (!hasImages) {
+      setInputText("");
+      setCameraOpen(false);
+      pushAssistantMessage("Karşılaştırmalı ürün analizi için en az bir fotoğraf ekleyin.");
+      inputRef.current?.focus();
+      return;
+    }
+
+    const loadingId = `${Date.now()}-loading`;
     const loadingMsg: Message = {
       id: loadingId,
       text: "Analiz ediliyor…",
@@ -213,7 +217,12 @@ export default function HomeScreen() {
       isLoading: true,
     };
 
-    setMessages((prev) => [loadingMsg, userMsg, ...prev]);
+    const images: AnalyzeImage[] = snapshots.map((snapshot) => ({
+      imageBase64: snapshot.base64,
+      mimeType: snapshot.mimeType,
+    }));
+
+    setMessages((prev) => [...prev, loadingMsg]);
     setIsSending(true);
     setInputText("");
     setSnapshots([]);
@@ -221,7 +230,11 @@ export default function HomeScreen() {
     inputRef.current?.focus();
 
     try {
-      const responseText = await analyzeWithGemini(text, images);
+      const responseText = await analyzeWithGemini(
+        hasText ? text : PHOTO_ONLY_FALLBACK_PROMPT,
+        images
+      );
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
@@ -242,7 +255,7 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [addSystemMessage, chatMode, inputText, isSending, snapshots]);
+  }, [chatMode, inputText, isSending, pushAssistantMessage, snapshots]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
@@ -253,41 +266,58 @@ export default function HomeScreen() {
   }, []);
 
   const renderMessage = useCallback(
-    ({ item }: { item: Message }) => (
-      <View
-        style={[
-          styles.messageBubble,
-          item.isUser ? styles.userBubble : styles.assistantBubble,
-        ]}
-      >
-        {item.photoUris?.length ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.messagePhotoRow}
-            style={styles.messagePhotoScroll}
-          >
-            {item.photoUris.map((uri, idx) => (
-              <Image
-                key={`${item.id}-photo-${idx}`}
-                source={{ uri }}
-                style={styles.messagePhoto}
-                resizeMode="cover"
-              />
-            ))}
-          </ScrollView>
-        ) : null}
-        <Text
+    ({ item }: { item: Message }) => {
+      const photoUris = item.photoUris ?? [];
+      const hasSinglePhoto = photoUris.length === 1;
+      const hasMultiplePhotos = photoUris.length > 1;
+
+      return (
+        <View
           style={[
-            styles.messageText,
-            item.isUser ? styles.userText : styles.assistantText,
-            item.isLoading && styles.loadingText,
+            styles.messageBubble,
+            item.isUser ? styles.userBubble : styles.assistantBubble,
           ]}
         >
-          {item.text}
-        </Text>
-      </View>
-    ),
+          {hasSinglePhoto ? (
+            <Image
+              source={{ uri: photoUris[0] }}
+              style={styles.messagePhotoSingle}
+              resizeMode="cover"
+            />
+          ) : null}
+
+          {hasMultiplePhotos ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.messagePhotoRow}
+              style={styles.messagePhotoScroll}
+            >
+              {photoUris.map((uri, idx) => (
+                <Image
+                  key={`${item.id}-photo-${idx}`}
+                  source={{ uri }}
+                  style={styles.messagePhotoMulti}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+
+          {item.text ? (
+            <Text
+              style={[
+                styles.messageText,
+                item.isUser ? styles.userText : styles.assistantText,
+                item.isLoading && styles.loadingText,
+              ]}
+            >
+              {item.text}
+            </Text>
+          ) : null}
+        </View>
+      );
+    },
     []
   );
 
@@ -325,12 +355,12 @@ export default function HomeScreen() {
         keyboardVerticalOffset={0}
       >
         <FlatList
+          ref={listRef}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
-          inverted
           style={styles.messageList}
-          contentContainerStyle={styles.messageListContent}
+          contentContainerStyle={[styles.messageListContent, { paddingBottom: 12 }]}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -368,10 +398,10 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!(inputText.trim() && snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
+              (!(inputText.trim() || snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!(inputText.trim() && snapshots.length > 0) || isSending}
+            disabled={!(inputText.trim() || snapshots.length > 0) || isSending}
             activeOpacity={0.8}
             testID="send-btn"
           >
@@ -379,7 +409,7 @@ export default function HomeScreen() {
               name="arrow-up"
               size={18}
               color={
-                inputText.trim() && snapshots.length > 0 && !isSending
+                (inputText.trim() || snapshots.length > 0) && !isSending
                   ? Colors.white
                   : Colors.textSecondary
               }
@@ -495,17 +525,17 @@ function CameraFullScreen({
             style={[
               styles.sendButton,
               styles.cameraSendButton,
-              (!(inputText.trim() && snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
+              (!(inputText.trim() || snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
             ]}
             onPress={onSend}
-            disabled={!(inputText.trim() && snapshots.length > 0) || isSending}
+            disabled={!(inputText.trim() || snapshots.length > 0) || isSending}
             activeOpacity={0.8}
           >
             <Ionicons
               name="arrow-up"
               size={18}
               color={
-                inputText.trim() && snapshots.length > 0 && !isSending
+                (inputText.trim() || snapshots.length > 0) && !isSending
                   ? Colors.white
                   : Colors.textSecondary
               }
@@ -631,7 +661,6 @@ const styles = StyleSheet.create({
   },
   messageListContent: {
     paddingTop: 6,
-    paddingBottom: 4,
     gap: 8,
   },
   messageBubble: {
@@ -650,15 +679,21 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderBottomLeftRadius: 5,
   },
+  messagePhotoSingle: {
+    width: 170,
+    height: 170,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
   messagePhotoScroll: {
     marginBottom: 8,
   },
   messagePhotoRow: {
     gap: 6,
   },
-  messagePhoto: {
-    width: 96,
-    height: 96,
+  messagePhotoMulti: {
+    width: 72,
+    height: 72,
     borderRadius: 10,
   },
   messageText: {
