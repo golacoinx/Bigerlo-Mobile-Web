@@ -18,7 +18,7 @@ Kurallar:
 5) Dikkat edilmesi gerekenler`;
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 const THROTTLE_WINDOW_MS = 2000;
 const MAX_IMAGES = 5;
