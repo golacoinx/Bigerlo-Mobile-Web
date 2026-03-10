@@ -180,8 +180,8 @@ export default function HomeScreen() {
   }, []);
 
   const handleSend = useCallback(async () => {
-    const text = inputText.trim();
-    const hasText = Boolean(text);
+    const trimmedText = inputText.trim();
+    const hasText = Boolean(trimmedText);
     const hasImages = snapshots.length > 0;
 
     if (isSending) return;
@@ -191,7 +191,7 @@ export default function HomeScreen() {
 
     const userMsg: Message = {
       id: `${Date.now()}-user`,
-      text,
+      text: trimmedText,
       isUser: true,
       photoUris: hasImages ? snapshots.map((snapshot) => snapshot.uri) : undefined,
     };
@@ -206,10 +206,14 @@ export default function HomeScreen() {
       isLoading: true,
     };
 
-    const images: AnalyzeImage[] = snapshots.map((snapshot) => ({
-      imageBase64: snapshot.base64,
-      mimeType: snapshot.mimeType,
-    }));
+    const images: AnalyzeImage[] = hasImages
+      ? snapshots.map((snapshot) => ({
+          imageBase64: snapshot.base64,
+          mimeType: snapshot.mimeType,
+        }))
+      : [];
+
+    const payloadMessage = hasText ? trimmedText : "";
 
     setMessages((prev) => [...prev, loadingMsg]);
     setIsSending(true);
@@ -219,7 +223,7 @@ export default function HomeScreen() {
     inputRef.current?.focus();
 
     try {
-      const responseText = await analyzeWithGemini(text, images);
+      const responseText = await analyzeWithGemini(payloadMessage, images);
 
       setMessages((prev) =>
         prev.map((m) =>

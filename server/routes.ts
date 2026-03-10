@@ -26,6 +26,9 @@ Kurallar:
 - Kullanıcı bağlamına göre (ör. hassas cilt, egzama, akne) dikkat notları ekle.
 - Tıbbi tanı veya kesin tedavi önerisi verme.`;
 
+const IMAGE_ONLY_FALLBACK_PROMPT =
+  "Görselleri analiz et ve Türkçe, faydalı, kısa ama yeterince açıklayıcı bir yanıt ver.";
+
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
@@ -64,12 +67,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       images?: AnalyzeImage[];
     };
 
-    if (typeof message !== "string" || !message.trim()) {
-      res.status(400).json({ error: "message is required and must be a non-empty string" });
+    const normalizedImages = Array.isArray(images) ? images : [];
+    const hasText = typeof message === "string" && message.trim().length > 0;
+    const hasImages = normalizedImages.length > 0;
+
+    if (!hasText && !hasImages) {
+      res.status(400).json({ error: "message or images is required" });
       return;
     }
-
-    const normalizedImages = Array.isArray(images) ? images : [];
 
     if (normalizedImages.length > MAX_IMAGES) {
       res.status(400).json({ error: `En fazla ${MAX_IMAGES} fotoğraf gönderebilirsiniz.` });
@@ -115,7 +120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     userParts.push({
       text:
-        `Kullanıcı sorusu: ${message.trim()}\n` +
+        `Kullanıcı sorusu: ${hasText ? message.trim() : IMAGE_ONLY_FALLBACK_PROMPT}\n` +
         `Toplam görsel sayısı: ${normalizedImages.length}. ` +
         "Görsel yoksa normal metin asistanı gibi cevapla; çoklu ürün varsa karşılaştır.",
     });
