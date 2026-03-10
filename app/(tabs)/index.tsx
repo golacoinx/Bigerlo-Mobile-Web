@@ -24,9 +24,6 @@ import { getApiUrl } from "@/lib/query-client";
 const SCAN_BOX_SIZE = 280;
 const MAX_SNAPSHOTS = 5;
 
-const PHOTO_ONLY_FALLBACK_PROMPT =
-  "Görsellerdeki ürünleri karşılaştırmalı olarak analiz et. İçerik ve kullanım açısından kısa öneri ver.";
-
 type Snapshot = {
   id: string;
   uri: string;
@@ -201,14 +198,6 @@ export default function HomeScreen() {
 
     setMessages((prev) => [...prev, userMsg]);
 
-    if (!hasImages) {
-      setInputText("");
-      setCameraOpen(false);
-      pushAssistantMessage("Karşılaştırmalı ürün analizi için en az bir fotoğraf ekleyin.");
-      inputRef.current?.focus();
-      return;
-    }
-
     const loadingId = `${Date.now()}-loading`;
     const loadingMsg: Message = {
       id: loadingId,
@@ -230,10 +219,7 @@ export default function HomeScreen() {
     inputRef.current?.focus();
 
     try {
-      const responseText = await analyzeWithGemini(
-        hasText ? text : PHOTO_ONLY_FALLBACK_PROMPT,
-        images
-      );
+      const responseText = await analyzeWithGemini(text, images);
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -255,7 +241,7 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [chatMode, inputText, isSending, pushAssistantMessage, snapshots]);
+  }, [chatMode, inputText, isSending, snapshots]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);

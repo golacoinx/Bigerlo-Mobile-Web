@@ -18,6 +18,14 @@ Yanıt formatı (kısa ama doyurucu):
 4) Kullanıcı sorusuna net cevap
 5) Çoklu ürün varsa kısa sıralama + hangi durumda hangisi`;
 
+const TEXT_ONLY_SYSTEM_PROMPT = `Sen Bigerlo'sun. Kozmetik, temizlik ürünleri, cilt güvenliği ve genel sorularda yardımcı olan bir asistansın.
+
+Kurallar:
+- Yanıtın tamamen Türkçe olsun.
+- Kısa, net ve pratik cevap ver.
+- Kullanıcı bağlamına göre (ör. hassas cilt, egzama, akne) dikkat notları ekle.
+- Tıbbi tanı veya kesin tedavi önerisi verme.`;
+
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
@@ -61,18 +69,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return;
     }
 
-    if (!Array.isArray(images) || images.length === 0) {
-      res.status(400).json({ error: "at least one image is required" });
-      return;
-    }
+    const normalizedImages = Array.isArray(images) ? images : [];
 
-    if (images.length > MAX_IMAGES) {
+    if (normalizedImages.length > MAX_IMAGES) {
       res.status(400).json({ error: `En fazla ${MAX_IMAGES} fotoğraf gönderebilirsiniz.` });
       return;
     }
 
     let totalSizeBytes = 0;
-    for (const image of images) {
+    for (const image of normalizedImages) {
       if (typeof image.imageBase64 !== "string" || !image.imageBase64.trim()) {
         res.status(400).json({ error: "each image must include imageBase64" });
         return;
@@ -99,7 +104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const userParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
 
-    for (const image of images) {
+    for (const image of normalizedImages) {
       userParts.push({
         inlineData: {
           mimeType: image.mimeType || "image/jpeg",
@@ -111,13 +116,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     userParts.push({
       text:
         `Kullanıcı sorusu: ${message.trim()}\n` +
-        `Toplam görsel sayısı: ${images.length}. ` +
-        "Birden fazla ürün varsa karşılaştır, uygunluk değerlendirmesi yap ve kısa bir sıralama öner.",
+        `Toplam görsel sayısı: ${normalizedImages.length}. ` +
+        "Görsel yoksa normal metin asistanı gibi cevapla; çoklu ürün varsa karşılaştır.",
     });
 
     const body = {
       systemInstruction: {
-        parts: [{ text: SYSTEM_PROMPT }],
+        parts: [
+          {
+            text:
+              normalizedImages.length > 0
+                ? SYSTEM_PROMPT
+                : TEXT_ONLY_SYSTEM_PROMPT,
+          },
+        ],
       },
       contents: [
         {
