@@ -16,21 +16,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImageManipulator from "expo-image-manipulator";
+import {
+  DEFAULT_MAX_SNAPSHOTS,
+  captureSnapshot,
+  getBestPictureSize,
+  snapshotsToAnalyzeImages,
+  type AnalyzeImage,
+  type Snapshot,
+} from "@/lib/camera/snapshot-camera";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 
 const SCAN_BOX_SIZE = 280;
-const MAX_SNAPSHOTS = 5;
-
-type Snapshot = {
-  id: string;
-  uri: string;
-  thumbnailUri: string;
-  base64: string;
-  mimeType: string;
-};
-
 type Message = {
   id: string;
   text: string;
@@ -39,10 +36,6 @@ type Message = {
   isLoading?: boolean;
 };
 
-type AnalyzeImage = {
-  imageBase64: string;
-  mimeType: string;
-};
 
 const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
 
@@ -160,8 +153,8 @@ export default function HomeScreen() {
   }, [permission, requestPermission]);
 
   const handleCapture = useCallback(async () => {
-    if (snapshots.length >= MAX_SNAPSHOTS) {
-      pushAssistantMessage(`En fazla ${MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
+    if (snapshots.length >= DEFAULT_MAX_SNAPSHOTS) {
+      pushAssistantMessage(`En fazla ${DEFAULT_MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
       return;
     }
 
@@ -169,62 +162,14 @@ export default function HomeScreen() {
     if (now - lastCaptureRef.current < 1200) return;
     lastCaptureRef.current = now;
 
-    if (!cameraRef.current) return;
-
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 1,
-        base64: true,
-        skipProcessing: false,
-        exif: false,
-      });
-      if (!photo?.uri) return;
-
-      const cropSize = Math.min(photo.width, photo.height) * 0.85;
-      const originX = (photo.width - cropSize) / 2;
-      const originY = (photo.height - cropSize) / 2;
-
-      const targetSize = Math.min(cropSize, 1600);
-
-      const result = await ImageManipulator.manipulateAsync(
-        photo.uri,
-        [
-          { crop: { originX, originY, width: cropSize, height: cropSize } },
-          { resize: { width: targetSize, height: targetSize } },
-        ],
-        {
-          compress: 0.9,
-          format: ImageManipulator.SaveFormat.JPEG,
-          base64: true,
-        }
-      );
-
-      const thumbnail = await ImageManipulator.manipulateAsync(
-        result.uri,
-        [{ resize: { width: 320 } }],
-        {
-          compress: 0.6,
-          format: ImageManipulator.SaveFormat.JPEG,
-          base64: false,
-        }
-      );
-
-      const processedBase64 = result.base64;
-      if (!processedBase64) {
+      const snapshot = await captureSnapshot({ cameraRef });
+      if (!snapshot) {
         pushAssistantMessage("Fotoğraf işlenemedi. Lütfen tekrar deneyin.");
         return;
       }
 
-      setSnapshots((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          uri: result.uri,
-          thumbnailUri: thumbnail.uri,
-          base64: processedBase64,
-          mimeType: "image/jpeg",
-        },
-      ]);
+      setSnapshots((prev) => [...prev, snapshot]);
     } catch {
       pushAssistantMessage("Fotoğraf çekilirken bir hata oluştu. Lütfen tekrar deneyin.");
     }
@@ -261,12 +206,7 @@ export default function HomeScreen() {
       isLoading: true,
     };
 
-    const images: AnalyzeImage[] = hasImages
-      ? snapshots.map((snapshot) => ({
-          imageBase64: snapshot.base64,
-          mimeType: snapshot.mimeType,
-        }))
-      : [];
+    const images: AnalyzeImage[] = hasImages ? snapshotsToAnalyzeImages(snapshots) : [];
 
     const payloadMessage = hasText ? trimmedText : "";
 
@@ -296,27 +236,10 @@ export default function HomeScreen() {
   }, [chatMode, inputText, isSending, snapshots, streamAssistantText]);
 
   const handleCameraReady = useCallback(async () => {
-    if (!cameraRef.current) return;
-
     try {
-      const cameraApi = cameraRef.current as CameraView & {
-        getAvailablePictureSizesAsync?: () => Promise<string[]>;
-      };
-
-      const availableSizes = await cameraApi.getAvailablePictureSizesAsync?.();
-      if (!availableSizes?.length) return;
-
-      const sorted = [...availableSizes]
-        .map((size) => {
-          const [w, h] = size.split("x").map((v) => Number(v));
-          if (!w || !h) return { size, area: 0, ratioDelta: Number.POSITIVE_INFINITY };
-          const ratio = w / h;
-          return { size, area: w * h, ratioDelta: Math.abs(ratio - 4 / 3) };
-        })
-        .sort((a, b) => a.ratioDelta - b.ratioDelta || b.area - a.area);
-
-      if (sorted[0]?.size) {
-        setCameraPictureSize(sorted[0].size);
+      const bestSize = await getBestPictureSize(cameraRef);
+      if (bestSize) {
+        setCameraPictureSize(bestSize);
       }
     } catch {
       // noop: fallback to camera defaults
@@ -630,7 +553,7 @@ function CameraFullScreen({
             style={styles.captureButton}
             onPress={onCapture}
             activeOpacity={0.85}
-            disabled={snapshots.length >= MAX_SNAPSHOTS || isSending}
+            disabled={snapshots.length >= DEFAULT_MAX_SNAPSHOTS || isSending}
           >
             <View style={styles.captureButtonInner} />
           </TouchableOpacity>
