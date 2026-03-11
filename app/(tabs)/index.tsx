@@ -18,7 +18,6 @@ import {
   DEFAULT_MAX_SNAPSHOTS,
   captureSnapshot,
   getBestPictureSize,
-  snapshotsToAnalyzeImages,
   type AnalyzeImage,
   type Snapshot,
 } from "@/lib/camera/snapshot-camera";
@@ -27,6 +26,11 @@ import { MessageItem, type ChatMessage } from "@/components/chat/MessageItem";
 import { SnapshotStrip } from "@/components/chat/SnapshotStrip";
 import { Composer } from "@/components/chat/Composer";
 import { CameraBottomPanel } from "@/components/chat/CameraBottomPanel";
+import {
+  createLoadingMessage,
+  createUserMessage,
+  getComposedMessageParts,
+} from "@/lib/chat/send-helpers";
 import { getApiUrl } from "@/lib/query-client";
 
 const SCAN_BOX_SIZE = 280;
@@ -174,35 +178,20 @@ export default function HomeScreen() {
   }, []);
 
   const handleSend = useCallback(async () => {
-    const trimmedText = inputText.trim();
-    const hasText = Boolean(trimmedText);
-    const hasImages = snapshots.length > 0;
+    const { trimmedText, hasText, hasImages, payloadMessage, images } =
+      getComposedMessageParts(inputText, snapshots);
 
     if (isSending) return;
     if (!hasText && !hasImages) return;
 
     if (!chatMode) setChatMode(true);
 
-    const userMsg: ChatMessage = {
-      id: `${Date.now()}-user`,
-      text: trimmedText,
-      isUser: true,
-      photoUris: hasImages ? snapshots.map((snapshot) => snapshot.thumbnailUri) : undefined,
-    };
+    const userMsg = createUserMessage(`${Date.now()}-user`, trimmedText, snapshots);
 
     setMessages((prev) => [...prev, userMsg]);
 
     const loadingId = `${Date.now()}-loading`;
-    const loadingMsg: ChatMessage = {
-      id: loadingId,
-      text: "Analiz ediliyor…",
-      isUser: false,
-      isLoading: true,
-    };
-
-    const images: AnalyzeImage[] = hasImages ? snapshotsToAnalyzeImages(snapshots) : [];
-
-    const payloadMessage = hasText ? trimmedText : "";
+    const loadingMsg = createLoadingMessage(loadingId);
 
     setMessages((prev) => [...prev, loadingMsg]);
     setIsSending(true);
