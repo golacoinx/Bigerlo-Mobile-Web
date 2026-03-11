@@ -10,7 +10,6 @@ import {
   Image,
   Platform,
   StatusBar,
-  Dimensions,
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,6 +26,7 @@ const MAX_SNAPSHOTS = 5;
 type Snapshot = {
   id: string;
   uri: string;
+  thumbnailUri: string;
   base64: string;
   mimeType: string;
 };
@@ -76,6 +76,7 @@ export default function HomeScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
   const cameraRef = useRef<CameraView>(null);
   const inputRef = useRef<TextInput>(null);
   const listRef = useRef<FlatList<Message>>(null);
@@ -129,18 +130,17 @@ export default function HomeScreen() {
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
-        base64: false,
+        base64: true,
+        skipProcessing: false,
+        exif: false,
       });
       if (!photo?.uri) return;
 
-      const screen = Dimensions.get("window");
-      const scaleX = photo.width / screen.width;
-      const scaleY = photo.height / screen.height;
-      const cropSize = SCAN_BOX_SIZE * Math.min(scaleX, scaleY);
+      const cropSize = Math.min(photo.width, photo.height) * 0.85;
       const originX = (photo.width - cropSize) / 2;
       const originY = (photo.height - cropSize) / 2;
 
-      const targetSize = Math.min(cropSize, 800);
+      const targetSize = Math.min(cropSize, 1600);
 
       const result = await ImageManipulator.manipulateAsync(
         photo.uri,
@@ -149,9 +149,19 @@ export default function HomeScreen() {
           { resize: { width: targetSize, height: targetSize } },
         ],
         {
-          compress: 0.3,
+          compress: 0.9,
           format: ImageManipulator.SaveFormat.JPEG,
           base64: true,
+        }
+      );
+
+      const thumbnail = await ImageManipulator.manipulateAsync(
+        result.uri,
+        [{ resize: { width: 320 } }],
+        {
+          compress: 0.6,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: false,
         }
       );
 
@@ -166,6 +176,7 @@ export default function HomeScreen() {
         {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           uri: result.uri,
+          thumbnailUri: thumbnail.uri,
           base64: processedBase64,
           mimeType: "image/jpeg",
         },
@@ -193,7 +204,7 @@ export default function HomeScreen() {
       id: `${Date.now()}-user`,
       text: trimmedText,
       isUser: true,
-      photoUris: hasImages ? snapshots.map((snapshot) => snapshot.uri) : undefined,
+      photoUris: hasImages ? snapshots.map((snapshot) => snapshot.thumbnailUri) : undefined,
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -246,6 +257,34 @@ export default function HomeScreen() {
       setIsSending(false);
     }
   }, [chatMode, inputText, isSending, snapshots]);
+
+  const handleCameraReady = useCallback(async () => {
+    if (!cameraRef.current) return;
+
+    try {
+      const cameraApi = cameraRef.current as CameraView & {
+        getAvailablePictureSizesAsync?: () => Promise<string[]>;
+      };
+
+      const availableSizes = await cameraApi.getAvailablePictureSizesAsync?.();
+      if (!availableSizes?.length) return;
+
+      const sorted = [...availableSizes]
+        .map((size) => {
+          const [w, h] = size.split("x").map((v) => Number(v));
+          if (!w || !h) return { size, area: 0, ratioDelta: Number.POSITIVE_INFINITY };
+          const ratio = w / h;
+          return { size, area: w * h, ratioDelta: Math.abs(ratio - 4 / 3) };
+        })
+        .sort((a, b) => a.ratioDelta - b.ratioDelta || b.area - a.area);
+
+      if (sorted[0]?.size) {
+        setCameraPictureSize(sorted[0].size);
+      }
+    } catch {
+      // noop: fallback to camera defaults
+    }
+  }, []);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
@@ -416,11 +455,13 @@ export default function HomeScreen() {
       >
         <CameraFullScreen
           cameraRef={cameraRef}
+          cameraPictureSize={cameraPictureSize}
           snapshots={snapshots}
           inputText={inputText}
           isSending={isSending}
           onInputTextChange={setInputText}
           onCapture={handleCapture}
+          onCameraReady={handleCameraReady}
           onRemoveSnapshot={removeSnapshot}
           onSend={handleSend}
           onClose={() => setCameraOpen(false)}
@@ -432,9 +473,11 @@ export default function HomeScreen() {
 
 type CameraFullScreenProps = {
   cameraRef: React.RefObject<CameraView | null>;
+  cameraPictureSize?: string;
   snapshots: Snapshot[];
   inputText: string;
   isSending: boolean;
+  onCameraReady: () => void;
   onInputTextChange: (value: string) => void;
   onCapture: () => void;
   onRemoveSnapshot: (id: string) => void;
@@ -444,9 +487,11 @@ type CameraFullScreenProps = {
 
 function CameraFullScreen({
   cameraRef,
+  cameraPictureSize,
   snapshots,
   inputText,
   isSending,
+  onCameraReady,
   onInputTextChange,
   onCapture,
   onRemoveSnapshot,
@@ -464,6 +509,11 @@ function CameraFullScreen({
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing="back"
+        ratio="4:3"
+        pictureSize={cameraPictureSize}
+        autofocus="on"
+        flash="off"
+        onCameraReady={onCameraReady}
       />
 
       <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
@@ -495,6 +545,12 @@ function CameraFullScreen({
         ) : (
           <Text style={styles.cameraHint}>Ürünleri sırayla çekin (en fazla {MAX_SNAPSHOTS})</Text>
         )}
+
+        <View style={styles.cameraGuideWrap}>
+          <Text style={styles.cameraGuideText}>• Ürünü daha yakına getirin</Text>
+          <Text style={styles.cameraGuideText}>• Etiket metnini kadraja sığdırın</Text>
+          <Text style={styles.cameraGuideText}>• Kamerayı sabit tutun, ışığı artırın</Text>
+        </View>
 
         <View style={styles.cameraInputRow}>
           <View style={[styles.inputContainer, styles.cameraInputContainer]}>
@@ -572,7 +628,7 @@ function SnapshotStrip({
           ]}
         >
           <Image
-            source={{ uri: snapshot.uri }}
+            source={{ uri: snapshot.thumbnailUri }}
             style={styles.photoThumb}
             resizeMode="cover"
           />
@@ -803,6 +859,14 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
     fontSize: 13,
     marginBottom: 8,
+  },
+  cameraGuideWrap: {
+    marginBottom: 8,
+    gap: 2,
+  },
+  cameraGuideText: {
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 12,
   },
   cameraInputRow: {
     flexDirection: "row",
