@@ -19,13 +19,13 @@ Yanıt formatı (kısa ama doyurucu):
 4) Kullanıcı sorusuna net cevap
 5) Çoklu ürün varsa kısa sıralama + hangi durumda hangisi`;
 
-const TEXT_ONLY_SYSTEM_PROMPT = `Sen Bigerlo'sun. Kozmetik, temizlik ürünleri, cilt güvenliği ve genel sorularda yardımcı olan bir asistansın.
+const TEXT_ONLY_SYSTEM_PROMPT = `You are Bigerlo, a helpful AI assistant specialized in cosmetics, skincare, dermatology, ingredients and household cleaning products.
 
-Kurallar:
-- Yanıtın tamamen Türkçe olsun.
-- Kısa, net ve pratik cevap ver.
-- Kullanıcı bağlamına göre (ör. hassas cilt, egzama, akne) dikkat notları ekle.
-- Tıbbi tanı veya kesin tedavi önerisi verme.`;
+You can answer general questions normally like a conversational assistant.
+If the topic relates to cosmetics, skincare, dermatology or cleaning products, provide deeper expert guidance.
+
+Respond clearly in Turkish.
+Do not provide medical diagnosis or definitive treatment claims.`;
 
 const IMAGE_ONLY_FALLBACK_PROMPT =
   "Görselleri analiz et ve Türkçe, faydalı, kısa ama yeterince açıklayıcı bir yanıt ver.";
@@ -110,30 +110,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const userParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
 
-    for (const image of normalizedImages) {
+    if (hasImages) {
+      for (const image of normalizedImages) {
+        userParts.push({
+          inlineData: {
+            mimeType: image.mimeType || "image/jpeg",
+            data: image.imageBase64 ?? "",
+          },
+        });
+      }
+
       userParts.push({
-        inlineData: {
-          mimeType: image.mimeType || "image/jpeg",
-          data: image.imageBase64 ?? "",
-        },
+        text:
+          `Kullanıcı sorusu: ${hasText ? message.trim() : IMAGE_ONLY_FALLBACK_PROMPT}\n` +
+          `Toplam görsel sayısı: ${normalizedImages.length}. ` +
+          "Birden fazla ürün varsa karşılaştır, içerik/risk notlarını belirt ve pratik öneri ver.",
+      });
+    } else {
+      userParts.push({
+        text: message!.trim(),
       });
     }
-
-    userParts.push({
-      text:
-        `Kullanıcı sorusu: ${hasText ? message.trim() : IMAGE_ONLY_FALLBACK_PROMPT}\n` +
-        `Toplam görsel sayısı: ${normalizedImages.length}. ` +
-        "Görsel yoksa normal metin asistanı gibi cevapla; çoklu ürün varsa karşılaştır.",
-    });
 
     const body = {
       systemInstruction: {
         parts: [
           {
             text:
-              normalizedImages.length > 0
-                ? SYSTEM_PROMPT
-                : TEXT_ONLY_SYSTEM_PROMPT,
+              hasImages ? SYSTEM_PROMPT : TEXT_ONLY_SYSTEM_PROMPT,
           },
         ],
       },
