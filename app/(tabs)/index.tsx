@@ -7,10 +7,8 @@ import {
   FlatList,
   TextInput,
   Modal,
-  Image,
   Platform,
   StatusBar,
-  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,17 +23,13 @@ import {
   type Snapshot,
 } from "@/lib/camera/snapshot-camera";
 import Colors from "@/constants/colors";
+import { MessageItem, type ChatMessage } from "@/components/chat/MessageItem";
+import { SnapshotStrip } from "@/components/chat/SnapshotStrip";
+import { Composer } from "@/components/chat/Composer";
+import { CameraBottomPanel } from "@/components/chat/CameraBottomPanel";
 import { getApiUrl } from "@/lib/query-client";
 
 const SCAN_BOX_SIZE = 280;
-type Message = {
-  id: string;
-  text: string;
-  isUser: boolean;
-  photoUris?: string[];
-  isLoading?: boolean;
-};
-
 
 const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
 
@@ -66,13 +60,13 @@ export default function HomeScreen() {
   const [chatMode, setChatMode] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
   const cameraRef = useRef<CameraView>(null);
   const inputRef = useRef<TextInput>(null);
-  const listRef = useRef<FlatList<Message>>(null);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
   const typingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
@@ -189,7 +183,7 @@ export default function HomeScreen() {
 
     if (!chatMode) setChatMode(true);
 
-    const userMsg: Message = {
+    const userMsg: ChatMessage = {
       id: `${Date.now()}-user`,
       text: trimmedText,
       isUser: true,
@@ -199,7 +193,7 @@ export default function HomeScreen() {
     setMessages((prev) => [...prev, userMsg]);
 
     const loadingId = `${Date.now()}-loading`;
-    const loadingMsg: Message = {
+    const loadingMsg: ChatMessage = {
       id: loadingId,
       text: "Analiz ediliyor…",
       isUser: false,
@@ -255,66 +249,7 @@ export default function HomeScreen() {
   }, []);
 
   const renderMessage = useCallback(
-    ({ item }: { item: Message }) => {
-      const photoUris = item.photoUris ?? [];
-      const hasSinglePhoto = photoUris.length === 1;
-      const hasMultiplePhotos = photoUris.length > 1;
-
-      const showMedia = hasSinglePhoto || hasMultiplePhotos;
-
-      return (
-        <View
-          style={[
-            styles.messageItem,
-            item.isUser ? styles.messageItemUser : styles.messageItemAssistant,
-          ]}
-        >
-          {hasSinglePhoto ? (
-            <View style={styles.mediaOnlyContainer}>
-              <Image
-                source={{ uri: photoUris[0] }}
-                style={styles.messagePhotoSingle}
-                resizeMode="cover"
-              />
-            </View>
-          ) : null}
-
-          {hasMultiplePhotos ? (
-            <View style={styles.mediaOnlyContainer}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.messagePhotoRow}
-                style={styles.messagePhotoScroll}
-              >
-                {photoUris.map((uri, idx) => (
-                  <Image
-                    key={`${item.id}-photo-${idx}`}
-                    source={{ uri }}
-                    style={styles.messagePhotoMulti}
-                    resizeMode="cover"
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          {item.text ? (
-            <Text
-              style={[
-                styles.messageText,
-                item.isUser ? styles.userBubbleText : styles.assistantBubbleText,
-                item.isLoading && styles.loadingText,
-              ]}
-            >
-              {item.text}
-            </Text>
-          ) : showMedia ? null : (
-            <Text style={[styles.messageText, styles.userBubbleText]} />
-          )}
-        </View>
-      );
-    },
+    ({ item }: { item: ChatMessage }) => <MessageItem item={item} />,
     []
   );
 
@@ -367,52 +302,16 @@ export default function HomeScreen() {
           <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
         ) : null}
 
-        <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}> 
-          <View style={styles.inputContainer}>
-            <TextInput
-              ref={inputRef}
-              style={styles.textInput}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder="Mesajınızı yazın..."
-              placeholderTextColor={Colors.textSecondary}
-              multiline
-              maxLength={500}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-              blurOnSubmit={false}
-              testID="message-input"
-            />
-            <TouchableOpacity
-              style={styles.cameraInlineBtn}
-              onPress={handleCameraPress}
-              activeOpacity={0.7}
-              testID="camera-btn"
-            >
-              <Ionicons name="camera-outline" size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!(inputText.trim() || snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!(inputText.trim() || snapshots.length > 0) || isSending}
-            activeOpacity={0.8}
-            testID="send-btn"
-          >
-            <Ionicons
-              name="arrow-up"
-              size={18}
-              color={
-                (inputText.trim() || snapshots.length > 0) && !isSending
-                  ? Colors.white
-                  : Colors.textSecondary
-              }
-            />
-          </TouchableOpacity>
-        </View>
+        <Composer
+          inputRef={inputRef}
+          inputText={inputText}
+          snapshotsCount={snapshots.length}
+          onChangeText={setInputText}
+          onCameraPress={handleCameraPress}
+          onSend={handleSend}
+          bottomPadding={bottomPadding}
+          isSending={isSending}
+        />
       </KeyboardAvoidingView>
 
       <Modal
@@ -510,100 +409,20 @@ function CameraFullScreen({
         </View>
       ) : null}
 
-      <View style={[styles.cameraBottomPanel, { paddingBottom: bottomPadding + 12 }]}>
-        <View style={styles.cameraInputRow}>
-          <View style={[styles.inputContainer, styles.cameraInputContainer]}>
-            <TextInput
-              style={[styles.textInput, styles.cameraTextInput]}
-              value={inputText}
-              onChangeText={onInputTextChange}
-              placeholder="Örn: Hangisi daha iyi, akneli cilt için uygun mu?"
-              placeholderTextColor="rgba(255,255,255,0.65)"
-              multiline
-              maxLength={500}
-              returnKeyType="send"
-              onSubmitEditing={onSend}
-              blurOnSubmit={false}
-            />
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              styles.cameraSendButton,
-              (!(inputText.trim() || snapshots.length > 0) || isSending) && styles.sendButtonDisabled,
-            ]}
-            onPress={onSend}
-            disabled={!(inputText.trim() || snapshots.length > 0) || isSending}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="arrow-up"
-              size={18}
-              color={
-                (inputText.trim() || snapshots.length > 0) && !isSending
-                  ? Colors.white
-                  : Colors.textSecondary
-              }
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.captureArea}>
-          <TouchableOpacity
-            style={styles.captureButton}
-            onPress={onCapture}
-            activeOpacity={0.85}
-            disabled={snapshots.length >= DEFAULT_MAX_SNAPSHOTS || isSending}
-          >
-            <View style={styles.captureButtonInner} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <CameraBottomPanel
+        inputText={inputText}
+        snapshotsCount={snapshots.length}
+        isSending={isSending}
+        bottomPadding={bottomPadding}
+        maxSnapshots={DEFAULT_MAX_SNAPSHOTS}
+        onInputTextChange={onInputTextChange}
+        onSend={onSend}
+        onCapture={onCapture}
+      />
     </View>
   );
 }
 
-
-function SnapshotStrip({
-  snapshots,
-  onRemove,
-  dark = false,
-}: {
-  snapshots: Snapshot[];
-  onRemove: (id: string) => void;
-  dark?: boolean;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.photoAttachRow}
-    >
-      {snapshots.map((snapshot) => (
-        <View
-          key={snapshot.id}
-          style={[
-            styles.photoThumbWrapper,
-            dark && styles.photoThumbWrapperDark,
-          ]}
-        >
-          <Image
-            source={{ uri: snapshot.thumbnailUri }}
-            style={styles.photoThumb}
-            resizeMode="cover"
-          />
-          <TouchableOpacity
-            style={styles.removePhotoBtn}
-            onPress={() => onRemove(snapshot.id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close-circle" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      ))}
-    </ScrollView>
-  );
-}
 
 const styles = StyleSheet.create({
   container: {
@@ -669,149 +488,8 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     gap: 8,
   },
-  messageItem: {
-    maxWidth: "82%",
-    gap: 6,
-  },
-  messageItemUser: {
-    alignSelf: "flex-end",
-  },
-  messageItemAssistant: {
-    alignSelf: "flex-start",
-  },
-  mediaOnlyContainer: {
-    borderRadius: 14,
-    overflow: "hidden",
-    alignSelf: "flex-start",
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 21,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-  },
-  userBubbleText: {
-    color: Colors.white,
-    backgroundColor: Colors.black,
-    borderBottomRightRadius: 5,
-  },
-  assistantBubbleText: {
-    color: Colors.textPrimary,
-    backgroundColor: Colors.card,
-    borderBottomLeftRadius: 5,
-  },
-  messageBubble: {
-    maxWidth: "82%",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-  },
-  userBubble: {
-    alignSelf: "flex-end",
-    backgroundColor: Colors.black,
-    borderBottomRightRadius: 5,
-  },
-  assistantBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: Colors.card,
-    borderBottomLeftRadius: 5,
-  },
-  messagePhotoSingle: {
-    width: 160,
-    height: 160,
-    borderRadius: 12,
-  },
-  messagePhotoScroll: {
-    maxHeight: 78,
-  },
-  messagePhotoRow: {
-    gap: 6,
-  },
-  messagePhotoMulti: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-  },
-  loadingText: {
-    opacity: 0.55,
-  },
 
-  photoAttachRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
-    paddingHorizontal: 2,
-  },
-  photoThumbWrapper: {
-    position: "relative",
-  },
-  photoThumbWrapperDark: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 14,
-    padding: 2,
-  },
-  photoThumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 14,
-  },
-  removePhotoBtn: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-    paddingTop: 8,
-    paddingHorizontal: 2,
-  },
-  inputContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    backgroundColor: Colors.card,
-    borderRadius: 22,
-    minHeight: 44,
-    maxHeight: 120,
-  },
-  textInput: {
-    flex: 1,
-    minHeight: 44,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    fontSize: 15,
-    color: Colors.textPrimary,
-    lineHeight: 21,
-  },
-  cameraInlineBtn: {
-    width: 40,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingRight: 6,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.black,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonDisabled: {
-    backgroundColor: Colors.cardInner,
-  },
 
   cameraContainer: {
     flex: 1,
@@ -849,52 +527,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingHorizontal: 16,
   },
-  cameraBottomPanel: {
-    paddingTop: 8,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
 
-  cameraInputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-    marginBottom: 14,
-  },
-  cameraInputContainer: {
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  cameraTextInput: {
-    color: Colors.white,
-  },
-  cameraSendButton: {
-    backgroundColor: Colors.black,
-  },
-  captureArea: {
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  captureButton: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  captureButtonInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Colors.white,
-    borderWidth: 2.5,
-    borderColor: "rgba(0,0,0,0.1)",
-  },
 
   scanBox: {
     width: SCAN_BOX_SIZE,
