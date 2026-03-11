@@ -505,53 +505,44 @@ function CameraFullScreen({
   return (
     <View style={styles.cameraContainer}>
       <StatusBar hidden />
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        ratio="4:3"
-        pictureSize={cameraPictureSize}
-        autofocus="on"
-        flash="off"
-        onCameraReady={onCameraReady}
-      />
 
-      <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
-        <View style={styles.scanOverlayTop} />
-        <View style={styles.scanOverlayMiddle}>
-          <View style={styles.scanOverlaySide} />
+      <View style={styles.cameraPreviewArea}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.cameraPreview}
+          facing="back"
+          ratio="4:3"
+          pictureSize={cameraPictureSize}
+          autofocus="on"
+          flash="off"
+          onCameraReady={onCameraReady}
+        />
+
+        <View style={styles.scanBoxOverlay} pointerEvents="none">
           <View style={styles.scanBox}>
             <View style={[styles.scanCorner, styles.scanCornerTL]} />
             <View style={[styles.scanCorner, styles.scanCornerTR]} />
             <View style={[styles.scanCorner, styles.scanCornerBL]} />
             <View style={[styles.scanCorner, styles.scanCornerBR]} />
           </View>
-          <View style={styles.scanOverlaySide} />
         </View>
-        <View style={styles.scanOverlayBottom} />
+
+        <TouchableOpacity
+          style={[styles.closeButton, { top: topPadding + 12 }]}
+          onPress={onClose}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="close" size={22} color={Colors.white} />
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={[styles.closeButton, { top: topPadding + 12 }]}
-        onPress={onClose}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="close" size={22} color={Colors.white} />
-      </TouchableOpacity>
-
-      <View style={[styles.cameraBottomPanel, { paddingBottom: bottomPadding + 12 }]}> 
-        {snapshots.length > 0 ? (
+      {snapshots.length > 0 ? (
+        <View style={styles.cameraSnapshotStripWrap}>
           <SnapshotStrip snapshots={snapshots} onRemove={onRemoveSnapshot} dark />
-        ) : (
-          <Text style={styles.cameraHint}>Ürünleri sırayla çekin (en fazla {MAX_SNAPSHOTS})</Text>
-        )}
-
-        <View style={styles.cameraGuideWrap}>
-          <Text style={styles.cameraGuideText}>• Ürünü daha yakına getirin</Text>
-          <Text style={styles.cameraGuideText}>• Etiket metnini kadraja sığdırın</Text>
-          <Text style={styles.cameraGuideText}>• Kamerayı sabit tutun, ışığı artırın</Text>
         </View>
+      ) : null}
 
+      <View style={[styles.cameraBottomPanel, { paddingBottom: bottomPadding + 12 }]}>
         <View style={styles.cameraInputRow}>
           <View style={[styles.inputContainer, styles.cameraInputContainer]}>
             <TextInput
@@ -603,6 +594,7 @@ function CameraFullScreen({
     </View>
   );
 }
+
 
 function SnapshotStrip({
   snapshots,
@@ -836,6 +828,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.black,
   },
+  cameraPreviewArea: {
+    flex: 1,
+    minHeight: 340,
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: Colors.black,
+  },
+  cameraPreview: {
+    width: "100%",
+    height: "100%",
+  },
+  scanBoxOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   closeButton: {
     position: "absolute",
     right: 20,
@@ -847,27 +855,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
+  cameraSnapshotStripWrap: {
+    minHeight: 78,
+    paddingTop: 8,
+    paddingHorizontal: 16,
+  },
   cameraBottomPanel: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
+    paddingTop: 8,
     paddingHorizontal: 16,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
-  cameraHint: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  cameraGuideWrap: {
-    marginBottom: 8,
-    gap: 2,
-  },
-  cameraGuideText: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 12,
-  },
+
   cameraInputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -909,27 +907,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.1)",
   },
 
-  scanOverlayTop: {
-    width: "100%",
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  scanOverlayMiddle: {
-    flexDirection: "row",
-    height: SCAN_BOX_SIZE,
-  },
-  scanOverlaySide: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
   scanBox: {
     width: SCAN_BOX_SIZE,
     height: SCAN_BOX_SIZE,
-  },
-  scanOverlayBottom: {
-    width: "100%",
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
   scanCorner: {
     position: "absolute",
