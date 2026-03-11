@@ -80,6 +80,7 @@ export default function HomeScreen() {
   const cameraRef = useRef<CameraView>(null);
   const inputRef = useRef<TextInput>(null);
   const listRef = useRef<FlatList<Message>>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -94,6 +95,49 @@ export default function HomeScreen() {
     }, 10);
     return () => clearTimeout(t);
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const streamAssistantText = useCallback(
+    (loadingId: string, fullText: string) =>
+      new Promise<void>((resolve) => {
+        if (typingTimerRef.current) {
+          clearInterval(typingTimerRef.current);
+          typingTimerRef.current = null;
+        }
+
+        const chars = [...fullText];
+        let index = 0;
+        const step = Math.max(1, Math.ceil(chars.length / 120));
+
+        typingTimerRef.current = setInterval(() => {
+          index = Math.min(chars.length, index + step);
+          const partial = chars.slice(0, index).join("");
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === loadingId
+                ? { ...m, text: partial, isLoading: index < chars.length }
+                : m
+            )
+          );
+
+          if (index >= chars.length && typingTimerRef.current) {
+            clearInterval(typingTimerRef.current);
+            typingTimerRef.current = null;
+            resolve();
+          }
+        }, 20);
+      }),
+    []
+  );
 
   const pushAssistantMessage = useCallback((text: string) => {
     setMessages((prev) => [
@@ -235,14 +279,7 @@ export default function HomeScreen() {
 
     try {
       const responseText = await analyzeWithGemini(payloadMessage, images);
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === loadingId
-            ? { ...m, text: responseText, isLoading: false }
-            : m
-        )
-      );
+      await streamAssistantText(loadingId, responseText);
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";
@@ -256,7 +293,7 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [chatMode, inputText, isSending, snapshots]);
+  }, [chatMode, inputText, isSending, snapshots, streamAssistantText]);
 
   const handleCameraReady = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -300,50 +337,58 @@ export default function HomeScreen() {
       const hasSinglePhoto = photoUris.length === 1;
       const hasMultiplePhotos = photoUris.length > 1;
 
+      const showMedia = hasSinglePhoto || hasMultiplePhotos;
+
       return (
         <View
           style={[
-            styles.messageBubble,
-            item.isUser ? styles.userBubble : styles.assistantBubble,
+            styles.messageItem,
+            item.isUser ? styles.messageItemUser : styles.messageItemAssistant,
           ]}
         >
           {hasSinglePhoto ? (
-            <Image
-              source={{ uri: photoUris[0] }}
-              style={styles.messagePhotoSingle}
-              resizeMode="cover"
-            />
+            <View style={styles.mediaOnlyContainer}>
+              <Image
+                source={{ uri: photoUris[0] }}
+                style={styles.messagePhotoSingle}
+                resizeMode="cover"
+              />
+            </View>
           ) : null}
 
           {hasMultiplePhotos ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.messagePhotoRow}
-              style={styles.messagePhotoScroll}
-            >
-              {photoUris.map((uri, idx) => (
-                <Image
-                  key={`${item.id}-photo-${idx}`}
-                  source={{ uri }}
-                  style={styles.messagePhotoMulti}
-                  resizeMode="cover"
-                />
-              ))}
-            </ScrollView>
+            <View style={styles.mediaOnlyContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.messagePhotoRow}
+                style={styles.messagePhotoScroll}
+              >
+                {photoUris.map((uri, idx) => (
+                  <Image
+                    key={`${item.id}-photo-${idx}`}
+                    source={{ uri }}
+                    style={styles.messagePhotoMulti}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+            </View>
           ) : null}
 
           {item.text ? (
             <Text
               style={[
                 styles.messageText,
-                item.isUser ? styles.userText : styles.assistantText,
+                item.isUser ? styles.userBubbleText : styles.assistantBubbleText,
                 item.isLoading && styles.loadingText,
               ]}
             >
               {item.text}
             </Text>
-          ) : null}
+          ) : showMedia ? null : (
+            <Text style={[styles.messageText, styles.userBubbleText]} />
+          )}
         </View>
       );
     },
@@ -701,6 +746,38 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     gap: 8,
   },
+  messageItem: {
+    maxWidth: "82%",
+    gap: 6,
+  },
+  messageItemUser: {
+    alignSelf: "flex-end",
+  },
+  messageItemAssistant: {
+    alignSelf: "flex-start",
+  },
+  mediaOnlyContainer: {
+    borderRadius: 14,
+    overflow: "hidden",
+    alignSelf: "flex-start",
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 21,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  userBubbleText: {
+    color: Colors.white,
+    backgroundColor: Colors.black,
+    borderBottomRightRadius: 5,
+  },
+  assistantBubbleText: {
+    color: Colors.textPrimary,
+    backgroundColor: Colors.card,
+    borderBottomLeftRadius: 5,
+  },
   messageBubble: {
     maxWidth: "82%",
     paddingVertical: 10,
@@ -718,13 +795,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 5,
   },
   messagePhotoSingle: {
-    width: 170,
-    height: 170,
+    width: 160,
+    height: 160,
     borderRadius: 12,
-    marginBottom: 8,
   },
   messagePhotoScroll: {
-    marginBottom: 8,
+    maxHeight: 78,
   },
   messagePhotoRow: {
     gap: 6,
@@ -733,16 +809,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 10,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  userText: {
-    color: Colors.white,
-  },
-  assistantText: {
-    color: Colors.textPrimary,
   },
   loadingText: {
     opacity: 0.55,
