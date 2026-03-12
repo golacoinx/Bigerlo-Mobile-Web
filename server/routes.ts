@@ -8,7 +8,7 @@ import {
   getClientThrottleKey,
   mapGeminiErrorToHttpResponse,
   normalizeAnalyzeInputs,
-  sanitizeModelText,
+  buildAnalyzeResponsePayload,
   validateAnalyzeRequest,
 } from "./analyze-helpers";
 
@@ -79,13 +79,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
       };
 
-      const text = sanitizeModelText(data);
+      const payload = buildAnalyzeResponsePayload(data);
 
-      if (!text) {
+      if (!payload) {
         return res.status(502).json({ error: "Modelden geçerli bir yanıt alınamadı." });
       }
 
-      return res.json({ text });
+      return res.json(payload);
     } catch (err) {
       console.error("Gemini fetch error:", err);
       return res.status(502).json({ error: "API isteği başarısız oldu. Lütfen tekrar deneyin." });

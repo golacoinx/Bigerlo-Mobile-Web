@@ -1,40 +1,111 @@
+import { z } from "zod";
+
 export const SYSTEM_PROMPT = `Sen Bigerlo için kozmetik/temizlik ürün analizi yapan asistansın.
 
-Kurallar:
+Çok önemli kurallar:
 - Yanıtın tamamen Türkçe olsun.
-- Selamlama, kapanış veya kendini tanıtma yazma.
 - Tıbbi tanı veya kesin tedavi önerisi verme.
-- Görsellerde ürün net değilse bunu açıkça belirt ve tahminini ayrı bir not olarak ver.
-- Görsel bulanık, uzak veya karanlıksa bunu açıkça söyle ve kullanıcıdan daha yakın, aydınlık ve sabit yeni fotoğraf iste.
-- Kullanıcı egzama, hassas cilt, akne gibi bağlam verirse buna özel dikkat notu ekle.
-- Birden fazla ürün varsa mutlaka karşılaştırma ve pratik öneri ver.
+- Belirsizlik varsa bunu açıkça belirt.
+- Ürün/görsel net değilse dikkat notu ekle.
+- Cevabı SADECE geçerli bir JSON nesnesi olarak döndür. Markdown, kod bloğu, açıklama metni ekleme.
 
-Yanıt formatı (kısa ama doyurucu):
-1) Ürün tespiti
-2) İçerik/aktif bileşen notları (görülebilen veya makul çıkarım)
-3) Risk/dikkat noktaları
-4) Kullanıcı sorusuna net cevap
-5) Çoklu ürün varsa kısa sıralama + hangi durumda hangisi`;
+JSON şeması (alan adları birebir):
+{
+  "replyText": string,
+  "product": {
+    "name": string,
+    "brand": string,
+    "type": string
+  },
+  "ingredients": string[],
+  "analysis": {
+    "summary": string,
+    "risks": string[],
+    "suitability": "uygun" | "dikkatli_kullan" | "uygun_degil" | "belirsiz",
+    "confidence": number,
+    "cautionNote": string
+  }
+}
+
+Ek notlar:
+- confidence 0 ile 1 arasında sayı olmalı.
+- replyText kullanıcıya gösterilecek kısa ve anlaşılır Türkçe açıklama olmalı.
+- risks ve ingredients yoksa boş dizi ver.
+- brand/type bilinmiyorsa "unknown" yaz.`;
 
 export const TEXT_ONLY_SYSTEM_PROMPT = `You are Bigerlo, a helpful AI assistant specialized in cosmetics, skincare, dermatology, ingredients and household cleaning products.
 
-You can answer general questions normally like a conversational assistant.
-If the topic relates to cosmetics, skincare, dermatology or cleaning products, provide deeper expert guidance.
-
-Respond clearly in Turkish.
-Do not provide medical diagnosis or definitive treatment claims.`;
+Respond in Turkish and never provide medical diagnosis.
+Return ONLY valid JSON with this exact shape:
+{
+  "replyText": string,
+  "product": { "name": string, "brand": string, "type": string },
+  "ingredients": string[],
+  "analysis": {
+    "summary": string,
+    "risks": string[],
+    "suitability": "uygun" | "dikkatli_kullan" | "uygun_degil" | "belirsiz",
+    "confidence": number,
+    "cautionNote": string
+  }
+}
+If unknown, use conservative defaults and keep confidence low.`;
 
 const IMAGE_ONLY_FALLBACK_PROMPT =
-  "Görselleri analiz et ve Türkçe, faydalı, kısa ama yeterince açıklayıcı bir yanıt ver.";
+  "Görselleri analiz et ve kullanıcı için güvenli, kısa, Türkçe bir değerlendirme yap.";
+
+const DEFAULT_CAUTION_NOTE =
+  "Bu değerlendirme genel bilgilendirme amaçlıdır; ciddi veya kalıcı şikayetlerde uzmana danışın.";
 
 export const THROTTLE_WINDOW_MS = 2000;
 const MAX_IMAGES = 5;
 const MAX_SINGLE_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024;
 
+const suitabilitySchema = z.enum(["uygun", "dikkatli_kullan", "uygun_degil", "belirsiz"]);
+
+const structuredModelOutputSchema = z.object({
+  replyText: z.string().trim().min(1).max(4000),
+  product: z.object({
+    name: z.string().trim().min(1).max(250),
+    brand: z.string().trim().min(1).max(250),
+    type: z.string().trim().min(1).max(250),
+  }),
+  ingredients: z.array(z.string().trim().min(1).max(250)).max(128).default([]),
+  analysis: z.object({
+    summary: z.string().trim().min(1).max(4000),
+    risks: z.array(z.string().trim().min(1).max(500)).max(64).default([]),
+    suitability: suitabilitySchema.default("belirsiz"),
+    confidence: z.number().min(0).max(1),
+    cautionNote: z.string().trim().min(1).max(1000),
+  }),
+});
+
 export type AnalyzeImage = {
   imageBase64?: string;
   mimeType?: string;
+};
+
+export type AnalyzeStructuredResult = {
+  product: {
+    name: string;
+    brand: string;
+    type: string;
+  };
+  ingredients: string[];
+  analysis: {
+    summary: string;
+    risks: string[];
+    suitability: z.infer<typeof suitabilitySchema>;
+    confidence: number;
+    cautionNote: string;
+  };
+};
+
+export type AnalyzeResponsePayload = {
+  text: string;
+  structured: AnalyzeStructuredResult;
+  structuredParseStatus: "parsed" | "fallback";
 };
 
 export type NormalizeAnalyzeInputsResult = {
@@ -132,7 +203,7 @@ export function buildGeminiParts(args: {
       text:
         `Kullanıcı sorusu: ${hasText ? message!.trim() : IMAGE_ONLY_FALLBACK_PROMPT}\n` +
         `Toplam görsel sayısı: ${normalizedImages.length}. ` +
-        "Birden fazla ürün varsa karşılaştır, içerik/risk notlarını belirt ve pratik öneri ver.",
+        "Ürün net değilse bunu belirt, uydurma içerik ekleme ve güven seviyesini düşür.",
     });
   } else {
     userParts.push({ text: message!.trim() });
@@ -156,22 +227,147 @@ export function buildGeminiPayload(args: {
       },
     ],
     generationConfig: {
-      temperature: 0.2,
+      temperature: 0.15,
       maxOutputTokens: 2048,
     },
   };
 }
 
-export function sanitizeModelText(data: {
+function getRawModelText(data: {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
 }): string {
-  const rawText =
+  return (
     data.candidates?.[0]?.content?.parts
       ?.map((part) => part.text?.trim())
       .filter((part): part is string => Boolean(part))
-      .join("\n\n") ?? "";
+      .join("\n\n") ?? ""
+  ).trim();
+}
 
-  return rawText.replace(/^\s*(Merhaba|Selam|Hi|Hello)[^\n]*\n?/i, "").trim();
+function stripGreeting(text: string): string {
+  return text.replace(/^\s*(Merhaba|Selam|Hi|Hello)[^\n]*\n?/i, "").trim();
+}
+
+function extractJsonCandidate(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch?.[1]) {
+    return codeBlockMatch[1].trim();
+  }
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1).trim();
+  }
+
+  return null;
+}
+
+function parseStructuredJson(text: string): z.infer<typeof structuredModelOutputSchema> | null {
+  const candidate = extractJsonCandidate(text);
+  if (!candidate) return null;
+
+  try {
+    const parsed = JSON.parse(candidate);
+    const validated = structuredModelOutputSchema.safeParse(parsed);
+    if (!validated.success) return null;
+
+    return {
+      ...validated.data,
+      ingredients: Array.from(new Set(validated.data.ingredients)),
+      analysis: {
+        ...validated.data.analysis,
+        risks: Array.from(new Set(validated.data.analysis.risks)),
+        confidence: Number(validated.data.analysis.confidence.toFixed(2)),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildFallbackStructured(rawText: string): AnalyzeStructuredResult {
+  const safeText = stripGreeting(rawText);
+  const summary = safeText || "Model yanıtı yapılandırılmış olarak alınamadı.";
+
+  return {
+    product: {
+      name: "unknown",
+      brand: "unknown",
+      type: "unknown",
+    },
+    ingredients: [],
+    analysis: {
+      summary,
+      risks: [],
+      suitability: "belirsiz",
+      confidence: 0.2,
+      cautionNote: DEFAULT_CAUTION_NOTE,
+    },
+  };
+}
+
+function buildDisplayTextFromStructured(
+  parsed: z.infer<typeof structuredModelOutputSchema>
+): string {
+  const reply = stripGreeting(parsed.replyText);
+  if (reply) return reply;
+
+  const sections = [parsed.analysis.summary, parsed.analysis.cautionNote]
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return sections.join("\n\n").trim();
+}
+
+export function buildAnalyzeResponsePayload(data: {
+  candidates?: { content?: { parts?: { text?: string }[] } }[];
+}): AnalyzeResponsePayload | null {
+  const rawModelText = getRawModelText(data);
+  if (!rawModelText) return null;
+
+  const parsed = parseStructuredJson(rawModelText);
+
+  if (!parsed) {
+    const fallbackStructured = buildFallbackStructured(rawModelText);
+    return {
+      text: fallbackStructured.analysis.summary,
+      structured: fallbackStructured,
+      structuredParseStatus: "fallback",
+    };
+  }
+
+  const displayText = buildDisplayTextFromStructured(parsed);
+
+  const structured: AnalyzeStructuredResult = {
+    product: {
+      name: parsed.product.name,
+      brand: parsed.product.brand,
+      type: parsed.product.type,
+    },
+    ingredients: parsed.ingredients,
+    analysis: {
+      summary: parsed.analysis.summary,
+      risks: parsed.analysis.risks,
+      suitability: parsed.analysis.suitability,
+      confidence: parsed.analysis.confidence,
+      cautionNote: parsed.analysis.cautionNote,
+    },
+  };
+
+  return {
+    text: displayText || structured.analysis.summary,
+    structured,
+    structuredParseStatus: "parsed",
+  };
 }
 
 export function mapGeminiErrorToHttpResponse(status: number): ValidationError {
