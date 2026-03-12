@@ -8,6 +8,7 @@ import {
   getClientThrottleKey,
   mapGeminiErrorToHttpResponse,
   normalizeAnalyzeInputs,
+  parseStructuredAnalyzeResponse,
   sanitizeModelText,
   validateAnalyzeRequest,
 } from "./analyze-helpers";
@@ -79,13 +80,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
       };
 
-      const text = sanitizeModelText(data);
+      const rawText = sanitizeModelText(data);
 
-      if (!text) {
+      if (!rawText) {
         return res.status(502).json({ error: "Modelden geçerli bir yanıt alınamadı." });
       }
 
-      return res.json({ text });
+      const structuredResult = parseStructuredAnalyzeResponse(rawText);
+      const text = structuredResult.displayText?.trim() || rawText;
+
+      return res.json({ text, structured: structuredResult.structured });
     } catch (err) {
       console.error("Gemini fetch error:", err);
       return res.status(502).json({ error: "API isteği başarısız oldu. Lütfen tekrar deneyin." });

@@ -1,20 +1,39 @@
+import { z } from "zod";
+
 export const SYSTEM_PROMPT = `Sen Bigerlo için kozmetik/temizlik ürün analizi yapan asistansın.
 
 Kurallar:
 - Yanıtın tamamen Türkçe olsun.
-- Selamlama, kapanış veya kendini tanıtma yazma.
 - Tıbbi tanı veya kesin tedavi önerisi verme.
-- Görsellerde ürün net değilse bunu açıkça belirt ve tahminini ayrı bir not olarak ver.
-- Görsel bulanık, uzak veya karanlıksa bunu açıkça söyle ve kullanıcıdan daha yakın, aydınlık ve sabit yeni fotoğraf iste.
-- Kullanıcı egzama, hassas cilt, akne gibi bağlam verirse buna özel dikkat notu ekle.
-- Birden fazla ürün varsa mutlaka karşılaştırma ve pratik öneri ver.
+- Sadece kozmetik/temizlik ürün uygunluğu ve dikkat noktaları üzerine konuş.
+- Görsellerde ürün net değilse bunu açıkça belirt.
+- Dönüş formatı sadece JSON olsun, markdown kullanma.
 
-Yanıt formatı (kısa ama doyurucu):
-1) Ürün tespiti
-2) İçerik/aktif bileşen notları (görülebilen veya makul çıkarım)
-3) Risk/dikkat noktaları
-4) Kullanıcı sorusuna net cevap
-5) Çoklu ürün varsa kısa sıralama + hangi durumda hangisi`;
+Aşağıdaki JSON şemasına UYGUN cevap ver:
+{
+  "displayText": "Kullanıcıya gösterilecek kısa-orta uzunlukta Türkçe açıklama",
+  "structured": {
+    "product": {
+      "name": "ürün adı veya bilinmiyor",
+      "brand": "marka veya bilinmiyor",
+      "type": "cleanser|serum|moisturizer|sunscreen|treatment|hair-care|cleaning|other"
+    },
+    "ingredients": ["içerik1", "içerik2"],
+    "analysis": {
+      "summary": "kısa özet",
+      "risks": ["risk1", "risk2"],
+      "suitability": "good|caution|avoid|unknown",
+      "confidence": 0.0,
+      "cautionNote": "hassas cilt vb. için dikkat notu"
+    }
+  }
+}
+
+Ek kurallar:
+- confidence 0 ile 1 arasında sayı olmalı.
+- Her zaman displayText alanını doldur.
+- Emin değilsen suitability=unknown kullan.
+- Ürün net değilse product name/brand için "bilinmiyor" yaz.`;
 
 export const TEXT_ONLY_SYSTEM_PROMPT = `You are Bigerlo, a helpful AI assistant specialized in cosmetics, skincare, dermatology, ingredients and household cleaning products.
 
@@ -22,7 +41,8 @@ You can answer general questions normally like a conversational assistant.
 If the topic relates to cosmetics, skincare, dermatology or cleaning products, provide deeper expert guidance.
 
 Respond clearly in Turkish.
-Do not provide medical diagnosis or definitive treatment claims.`;
+Do not provide medical diagnosis or definitive treatment claims.
+Return only JSON using the same schema as instructed.`;
 
 const IMAGE_ONLY_FALLBACK_PROMPT =
   "Görselleri analiz et ve Türkçe, faydalı, kısa ama yeterince açıklayıcı bir yanıt ver.";
@@ -31,6 +51,40 @@ export const THROTTLE_WINDOW_MS = 2000;
 const MAX_IMAGES = 5;
 const MAX_SINGLE_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024;
+
+const productTypeSchema = z.enum([
+  "cleanser",
+  "serum",
+  "moisturizer",
+  "sunscreen",
+  "treatment",
+  "hair-care",
+  "cleaning",
+  "other",
+]);
+
+const suitabilitySchema = z.enum(["good", "caution", "avoid", "unknown"]);
+
+const structuredAnalyzeSchema = z.object({
+  displayText: z.string().min(1),
+  structured: z.object({
+    product: z.object({
+      name: z.string().min(1),
+      brand: z.string().min(1),
+      type: productTypeSchema,
+    }),
+    ingredients: z.array(z.string()).default([]),
+    analysis: z.object({
+      summary: z.string().min(1),
+      risks: z.array(z.string()).default([]),
+      suitability: suitabilitySchema,
+      confidence: z.number().min(0).max(1),
+      cautionNote: z.string().optional(),
+    }),
+  }),
+});
+
+export type StructuredAnalyzeData = z.infer<typeof structuredAnalyzeSchema>;
 
 export type AnalyzeImage = {
   imageBase64?: string;
@@ -132,7 +186,7 @@ export function buildGeminiParts(args: {
       text:
         `Kullanıcı sorusu: ${hasText ? message!.trim() : IMAGE_ONLY_FALLBACK_PROMPT}\n` +
         `Toplam görsel sayısı: ${normalizedImages.length}. ` +
-        "Birden fazla ürün varsa karşılaştır, içerik/risk notlarını belirt ve pratik öneri ver.",
+        "Birden fazla ürün varsa karşılaştırma notunu displayText içinde belirt.",
     });
   } else {
     userParts.push({ text: message!.trim() });
@@ -158,6 +212,7 @@ export function buildGeminiPayload(args: {
     generationConfig: {
       temperature: 0.2,
       maxOutputTokens: 2048,
+      responseMimeType: "application/json",
     },
   };
 }
@@ -172,6 +227,77 @@ export function sanitizeModelText(data: {
       .join("\n\n") ?? "";
 
   return rawText.replace(/^\s*(Merhaba|Selam|Hi|Hello)[^\n]*\n?/i, "").trim();
+}
+
+function extractJsonObject(raw: string): unknown {
+  const trimmed = raw.trim();
+
+  if (!trimmed) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // continue with fenced/object extraction fallback
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (fenced) {
+    try {
+      return JSON.parse(fenced);
+    } catch {
+      // continue
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function buildFallbackStructuredFromText(text: string): StructuredAnalyzeData {
+  const normalized = text.trim() || "Ürün analizi üretilemedi.";
+
+  return {
+    displayText: normalized,
+    structured: {
+      product: {
+        name: "bilinmiyor",
+        brand: "bilinmiyor",
+        type: "other",
+      },
+      ingredients: [],
+      analysis: {
+        summary: normalized.slice(0, 600),
+        risks: [],
+        suitability: "unknown",
+        confidence: 0.3,
+        cautionNote: "Bu değerlendirme genel bilgilendirme amaçlıdır; kişisel hassasiyetler değişebilir.",
+      },
+    },
+  };
+}
+
+export function parseStructuredAnalyzeResponse(rawText: string): StructuredAnalyzeData {
+  const parsed = extractJsonObject(rawText);
+  if (!parsed) {
+    return buildFallbackStructuredFromText(rawText);
+  }
+
+  const validated = structuredAnalyzeSchema.safeParse(parsed);
+  if (!validated.success) {
+    return buildFallbackStructuredFromText(rawText);
+  }
+
+  return validated.data;
 }
 
 export function mapGeminiErrorToHttpResponse(status: number): ValidationError {
