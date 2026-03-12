@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
+  Dimensions,
   Modal,
   Pressable,
   StyleSheet,
@@ -23,23 +25,64 @@ type ProfileMenuProps = {
   onNavigate: (route: string) => void;
 };
 
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const DRAWER_WIDTH = Math.min(340, Math.round(SCREEN_WIDTH * 0.84));
+
 export function ProfileMenu({ visible, onClose, onNavigate }: ProfileMenuProps) {
-  const items: MenuItem[] = [
-    { key: "profile", label: "Profile & Account", icon: "person-outline", onPress: () => onNavigate("/profile") },
-    { key: "settings", label: "Settings", icon: "settings-outline", onPress: () => onNavigate("/settings") },
-    { key: "language", label: "Language", icon: "language-outline", onPress: () => onNavigate("/language") },
-    { key: "privacy", label: "Privacy", icon: "shield-checkmark-outline", onPress: () => onNavigate("/privacy") },
-    { key: "help", label: "Help & Support", icon: "help-circle-outline", onPress: () => onNavigate("/help-support") },
-    { key: "feedback", label: "Send Feedback", icon: "chatbox-ellipses-outline", onPress: () => onNavigate("/feedback") },
-    { key: "about", label: "About", icon: "information-circle-outline", onPress: () => onNavigate("/about") },
-  ];
+  const [mounted, setMounted] = useState(visible);
+  const slideX = useRef(new Animated.Value(DRAWER_WIDTH)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      Animated.timing(slideX, {
+        toValue: 0,
+        duration: 240,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    Animated.timing(slideX, {
+      toValue: DRAWER_WIDTH,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setMounted(false);
+      }
+    });
+  }, [slideX, visible]);
+
+  const items: MenuItem[] = useMemo(
+    () => [
+      { key: "profile", label: "Profile & Account", icon: "person-outline", onPress: () => onNavigate("/profile") },
+      { key: "settings", label: "Settings", icon: "settings-outline", onPress: () => onNavigate("/settings") },
+      { key: "language", label: "Language", icon: "language-outline", onPress: () => onNavigate("/language") },
+      { key: "privacy", label: "Privacy", icon: "shield-checkmark-outline", onPress: () => onNavigate("/privacy") },
+      { key: "help", label: "Help & Support", icon: "help-circle-outline", onPress: () => onNavigate("/help-support") },
+      { key: "feedback", label: "Send Feedback", icon: "chatbox-ellipses-outline", onPress: () => onNavigate("/feedback") },
+      { key: "about", label: "About", icon: "information-circle-outline", onPress: () => onNavigate("/about") },
+    ],
+    [onNavigate]
+  );
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>App Menu</Text>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
+      <View style={styles.root}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+
+        <Animated.View style={[styles.drawer, { transform: [{ translateX: slideX }] }]}>
+          <View style={styles.header}>
+            <Text style={styles.title}>App Menu</Text>
+            <TouchableOpacity style={styles.closeBtn} activeOpacity={0.8} onPress={onClose}>
+              <Ionicons name="close" size={20} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
 
           {items.map((item) => (
             <TouchableOpacity
@@ -56,40 +99,54 @@ export function ProfileMenu({ visible, onClose, onNavigate }: ProfileMenuProps) 
               <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
             </TouchableOpacity>
           ))}
-        </Pressable>
-      </Pressable>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    flexDirection: "row",
+  },
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.32)",
   },
-  sheet: {
+  drawer: {
+    width: DRAWER_WIDTH,
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 18,
-    paddingTop: 8,
+    borderTopLeftRadius: 22,
+    borderBottomLeftRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 28,
     gap: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: -2, height: 0 },
+    elevation: 10,
   },
-  handle: {
-    width: 48,
-    height: 5,
-    borderRadius: 999,
-    alignSelf: "center",
-    backgroundColor: Colors.border,
-    marginBottom: 12,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   title: {
     fontSize: 16,
     fontWeight: "700",
     color: Colors.textPrimary,
-    marginBottom: 10,
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
   },
   item: {
     minHeight: 46,

@@ -299,28 +299,27 @@ export default function HomeScreen() {
     <View style={[styles.container, { paddingTop: topPadding }]}> 
       {chatMode ? (
         <View style={styles.chatHeader}>
-          <View style={styles.chatHeaderActions}>
-            <TouchableOpacity
-              style={styles.chatHeaderBtn}
-              onPress={handleNewChat}
-              activeOpacity={0.75}
-              testID="new-chat-btn"
-            >
-              <Ionicons
-                name="create-outline"
-                size={18}
-                color={Colors.textPrimary}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.profilePhoto}
-              activeOpacity={0.8}
-              onPress={() => setMenuVisible(true)}
-              testID="profile-menu-btn"
-            >
-              <Ionicons name="person" size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.chatHeaderBtn}
+            onPress={handleNewChat}
+            activeOpacity={0.75}
+            testID="new-chat-btn"
+          >
+            <Ionicons
+              name="create-outline"
+              size={18}
+              color={Colors.textPrimary}
+            />
+          </TouchableOpacity>
+          <View style={styles.chatHeaderCenter} />
+          <TouchableOpacity
+            style={styles.profilePhoto}
+            activeOpacity={0.8}
+            onPress={() => setMenuVisible(true)}
+            testID="profile-menu-btn"
+          >
+            <Ionicons name="person" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.homeHeader}>
@@ -496,7 +495,6 @@ const styles = StyleSheet.create({
   homeHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 6,
     paddingBottom: 12,
@@ -510,6 +508,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brandTitle: {
+    flex: 1,
     fontSize: 24,
     fontWeight: "800",
     letterSpacing: 3,
@@ -521,15 +520,14 @@ const styles = StyleSheet.create({
   },
 
   chatHeader: {
-    alignItems: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 6,
     paddingBottom: 10,
   },
-  chatHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  chatHeaderCenter: {
+    flex: 1,
   },
   chatHeaderBtn: {
     width: 38,
