@@ -1,6 +1,8 @@
 import React from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import Colors from "@/constants/colors";
+import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
+import { AnalysisResultCard } from "@/components/chat/AnalysisResultCard";
 
 export type ChatMessage = {
   id: string;
@@ -8,6 +10,7 @@ export type ChatMessage = {
   isUser: boolean;
   photoUris?: string[];
   isLoading?: boolean;
+  structuredResult?: StructuredAnalysis;
 };
 
 export function MessageItem({ item }: { item: ChatMessage }) {
@@ -15,6 +18,18 @@ export function MessageItem({ item }: { item: ChatMessage }) {
   const hasSinglePhoto = photoUris.length === 1;
   const hasMultiplePhotos = photoUris.length > 1;
   const showMedia = hasSinglePhoto || hasMultiplePhotos;
+
+  const hasUsefulStructuredData = Boolean(
+    item.structuredResult &&
+      (
+        item.structuredResult.analysis.summary ||
+        item.structuredResult.analysis.risks.length > 0 ||
+        item.structuredResult.analysis.cautionNote ||
+        item.structuredResult.analysis.suitability !== "unknown" ||
+        item.structuredResult.product.name.toLowerCase() !== "bilinmiyor" ||
+        item.structuredResult.product.brand.toLowerCase() !== "bilinmiyor"
+      )
+  );
 
   return (
     <View
@@ -53,6 +68,10 @@ export function MessageItem({ item }: { item: ChatMessage }) {
         </View>
       ) : null}
 
+      {!item.isUser && hasUsefulStructuredData && item.structuredResult ? (
+        <AnalysisResultCard structured={item.structuredResult} />
+      ) : null}
+
       {item.text ? (
         <Text
           style={[
@@ -80,6 +99,7 @@ const styles = StyleSheet.create({
   },
   messageItemAssistant: {
     alignSelf: "flex-start",
+    maxWidth: "94%",
   },
   mediaOnlyContainer: {
     borderRadius: 14,

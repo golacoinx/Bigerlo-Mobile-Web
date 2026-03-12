@@ -35,6 +35,7 @@ import {
   getComposedMessageParts,
 } from "@/lib/chat/send-helpers";
 import { getApiUrl } from "@/lib/query-client";
+import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
 
 const SCAN_BOX_SIZE = 280;
 
@@ -43,7 +44,7 @@ const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
 async function analyzeWithGemini(
   message: string,
   images: AnalyzeImage[]
-): Promise<string> {
+): Promise<{ text: string; structured?: StructuredAnalysis }> {
   const base = getApiUrl();
   const url = new URL("/api/analyze", base).toString();
 
@@ -53,13 +54,13 @@ async function analyzeWithGemini(
     body: JSON.stringify({ message, images }),
   });
 
-  const data = (await response.json()) as { text?: string; error?: string };
+  const data = (await response.json()) as AnalyzeApiResponse;
 
   if (!response.ok) {
     throw new Error(data.error ?? "İstek başarısız oldu.");
   }
 
-  return data.text ?? "Yanıt alınamadı.";
+  return { text: data.text ?? "Yanıt alınamadı.", structured: data.structured };
 }
 
 export default function HomeScreen() {
@@ -102,7 +103,7 @@ export default function HomeScreen() {
   }, []);
 
   const streamAssistantText = useCallback(
-    (loadingId: string, fullText: string) =>
+    (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis) =>
       new Promise<void>((resolve) => {
         if (typingTimerRef.current) {
           clearInterval(typingTimerRef.current);
@@ -132,7 +133,7 @@ export default function HomeScreen() {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === loadingId
-                  ? { ...m, text: fullText, isLoading: false }
+                  ? { ...m, text: fullText, isLoading: false, structuredResult }
                   : m
               )
             );
@@ -247,8 +248,8 @@ export default function HomeScreen() {
     inputRef.current?.focus();
 
     try {
-      const responseText = await analyzeWithGemini(payloadMessage, images);
-      await streamAssistantText(loadingId, responseText);
+      const response = await analyzeWithGemini(payloadMessage, images);
+      await streamAssistantText(loadingId, response.text, response.structured);
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";
