@@ -124,6 +124,15 @@ export default function HomeScreen() {
           if (index >= chars.length && typingTimerRef.current) {
             clearInterval(typingTimerRef.current);
             typingTimerRef.current = null;
+
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === loadingId
+                  ? { ...m, text: fullText, isLoading: false }
+                  : m
+              )
+            );
+
             resolve();
           }
         }, 20);
