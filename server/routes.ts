@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "node:http";
+import { z } from "zod";
 import {
   THROTTLE_WINDOW_MS,
   type AnalyzeImage,
@@ -12,13 +13,87 @@ import {
   sanitizeModelText,
   validateAnalyzeRequest,
 } from "./analyze-helpers";
+import { storage } from "./storage";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 const lastGeminiCallByClient = new Map<string, number>();
+const profileIdByClient = new Map<string, string>();
+
+const arrayFieldSchema = z.preprocess((value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+
+  return value
+    .split(/[\n,]/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}, z.array(z.string().min(1)).max(100));
+
+const profileUpdateSchema = z.object({
+  skinType: z.string().trim().max(100).optional(),
+  hairType: z.string().trim().max(100).optional(),
+  sensitivities: arrayFieldSchema.optional(),
+  avoidIngredients: arrayFieldSchema.optional(),
+  knownReactions: arrayFieldSchema.optional(),
+});
+
+async function getOrCreateProfileForClient(clientKey: string) {
+  const existingId = profileIdByClient.get(clientKey);
+
+  if (existingId) {
+    const existing = await storage.domain.getUserProfile(existingId);
+    if (existing) return existing;
+  }
+
+  const created = await storage.domain.createUserProfile({
+    skinType: undefined,
+    hairType: undefined,
+    sensitivities: [],
+    avoidIngredients: [],
+    knownReactions: [],
+  });
+
+  profileIdByClient.set(clientKey, created.id);
+  return created;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/api/profile", async (req, res) => {
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+      return res.json({ profile });
+    } catch (error) {
+      console.error("Profile get error:", error);
+      return res.status(500).json({ error: "Profil alınamadı." });
+    }
+  });
+
+  app.put("/api/profile", async (req, res) => {
+    const parsedBody = profileUpdateSchema.safeParse(req.body ?? {});
+
+    if (!parsedBody.success) {
+      return res.status(400).json({ error: "Geçersiz profil verisi." });
+    }
+
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+      const updated = await storage.domain.updateUserProfile(profile.id, parsedBody.data);
+
+      if (!updated) {
+        return res.status(500).json({ error: "Profil güncellenemedi." });
+      }
+
+      return res.json({ profile: updated });
+    } catch (error) {
+      console.error("Profile update error:", error);
+      return res.status(500).json({ error: "Profil güncellenemedi." });
+    }
+  });
+
   app.post("/api/analyze", async (req, res) => {
     const { message, normalizedImages, hasText, hasImages } = normalizeAnalyzeInputs(
       req.body as {
