@@ -8,6 +8,7 @@ type ComposerProps = {
   onChangeText: (value: string) => void;
   onSend: () => void;
   onCameraPress: () => void;
+  onGalleryPress: () => void;
   bottomPadding: number;
   isSending: boolean;
   snapshotsCount: number;
@@ -19,6 +20,7 @@ export function Composer({
   onChangeText,
   onSend,
   onCameraPress,
+  onGalleryPress,
   bottomPadding,
   isSending,
   inputRef,
@@ -43,6 +45,14 @@ export function Composer({
           blurOnSubmit={false}
           testID="message-input"
         />
+        <TouchableOpacity
+          style={styles.galleryInlineBtn}
+          onPress={onGalleryPress}
+          activeOpacity={0.7}
+          testID="gallery-btn"
+        >
+          <Ionicons name="images-outline" size={20} color={Colors.textSecondary} />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.cameraInlineBtn}
           onPress={onCameraPress}
@@ -94,6 +104,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textPrimary,
     lineHeight: 21,
+  },
+  galleryInlineBtn: {
+    width: 36,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cameraInlineBtn: {
     width: 40,

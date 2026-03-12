@@ -18,6 +18,7 @@ import {
   DEFAULT_MAX_SNAPSHOTS,
   captureSnapshot,
   getBestPictureSize,
+  pickSnapshotsFromLibrary,
   type AnalyzeImage,
   type Snapshot,
 } from "@/lib/camera/snapshot-camera";
@@ -150,6 +151,38 @@ export default function HomeScreen() {
     setCameraOpen(true);
   }, [permission, requestPermission]);
 
+
+  const handleGalleryPress = useCallback(async () => {
+    const remainingSlots = DEFAULT_MAX_SNAPSHOTS - snapshots.length;
+
+    if (remainingSlots <= 0) {
+      pushAssistantMessage(`En fazla ${DEFAULT_MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
+      return;
+    }
+
+    try {
+      const result = await pickSnapshotsFromLibrary(remainingSlots);
+
+      if (result.permissionDenied) {
+        pushAssistantMessage("Galeri izni gerekli. Lütfen ayarlardan fotoğraf erişimine izin verin.");
+        return;
+      }
+
+      if (result.cancelled) {
+        return;
+      }
+
+      if (result.snapshots.length > 0) {
+        setSnapshots((prev) => [...prev, ...result.snapshots]);
+      }
+
+      if (result.failedCount > 0) {
+        pushAssistantMessage("Bazı galeri fotoğrafları işlenemedi. Lütfen tekrar deneyin.");
+      }
+    } catch {
+      pushAssistantMessage("Galeri fotoğrafı seçilirken bir hata oluştu. Lütfen tekrar deneyin.");
+    }
+  }, [pushAssistantMessage, snapshots.length]);
   const handleCapture = useCallback(async () => {
     if (snapshots.length >= DEFAULT_MAX_SNAPSHOTS) {
       pushAssistantMessage(`En fazla ${DEFAULT_MAX_SNAPSHOTS} fotoğraf ekleyebilirsiniz.`);
@@ -297,6 +330,7 @@ export default function HomeScreen() {
           snapshotsCount={snapshots.length}
           onChangeText={setInputText}
           onCameraPress={handleCameraPress}
+          onGalleryPress={handleGalleryPress}
           onSend={handleSend}
           bottomPadding={bottomPadding}
           isSending={isSending}
