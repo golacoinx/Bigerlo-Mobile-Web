@@ -387,6 +387,7 @@ export default function HomeScreen() {
           onCameraReady={handleCameraReady}
           onRemoveSnapshot={removeSnapshot}
           onSend={handleSend}
+          onGalleryPress={handleGalleryPress}
           onClose={() => setCameraOpen(false)}
         />
       </Modal>
@@ -411,6 +412,7 @@ type CameraFullScreenProps = {
   onCapture: () => void;
   onRemoveSnapshot: (id: string) => void;
   onSend: () => void;
+  onGalleryPress: () => void;
   onClose: () => void;
 };
 
@@ -425,6 +427,7 @@ function CameraFullScreen({
   onCapture,
   onRemoveSnapshot,
   onSend,
+  onGalleryPress,
   onClose,
 }: CameraFullScreenProps) {
   const insets = useSafeAreaInsets();
@@ -465,21 +468,17 @@ function CameraFullScreen({
         </TouchableOpacity>
       </View>
 
-      {snapshots.length > 0 ? (
-        <View style={styles.cameraSnapshotStripWrap}>
-          <SnapshotStrip snapshots={snapshots} onRemove={onRemoveSnapshot} dark />
-        </View>
-      ) : null}
-
       <CameraBottomPanel
         inputText={inputText}
-        snapshotsCount={snapshots.length}
+        snapshots={snapshots}
         isSending={isSending}
         bottomPadding={bottomPadding}
         maxSnapshots={DEFAULT_MAX_SNAPSHOTS}
         onInputTextChange={onInputTextChange}
         onSend={onSend}
         onCapture={onCapture}
+        onGalleryPress={onGalleryPress}
+        onRemoveSnapshot={onRemoveSnapshot}
       />
     </View>
   );
@@ -554,11 +553,11 @@ const styles = StyleSheet.create({
 
   cameraContainer: {
     flex: 1,
-    backgroundColor: Colors.black,
+    backgroundColor: Colors.background,
   },
   cameraPreviewArea: {
     flex: 1,
-    minHeight: 340,
+    minHeight: 360,
     position: "relative",
     overflow: "hidden",
     backgroundColor: Colors.black,
@@ -582,11 +581,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
-  },
-  cameraSnapshotStripWrap: {
-    minHeight: 78,
-    paddingTop: 8,
-    paddingHorizontal: 16,
   },
 
 
