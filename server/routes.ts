@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "node:http";
+import { z } from "zod";
 import {
   THROTTLE_WINDOW_MS,
   type AnalyzeImage,
@@ -11,13 +12,92 @@ import {
   buildAnalyzeResponsePayload,
   validateAnalyzeRequest,
 } from "./analyze-helpers";
+import { storage } from "./storage";
+import { upsertUserProfileSchema } from "@shared/schema";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+const DEFAULT_PROFILE_ID = "local-profile";
+
 const lastGeminiCallByClient = new Map<string, number>();
 
+const profilePatchSchema = upsertUserProfileSchema
+  .omit({ id: true })
+  .extend({
+    skinType: z.string().trim().max(100).optional(),
+    hairType: z.string().trim().max(100).optional(),
+    sensitivities: z.array(z.string().trim().max(100)).max(64).optional(),
+    avoidIngredients: z.array(z.string().trim().max(100)).max(64).optional(),
+    knownReactions: z.array(z.string().trim().max(140)).max(64).optional(),
+  })
+  .strict();
+
+function normalizeStringArray(input: string[] | undefined): string[] | undefined {
+  if (!input) return undefined;
+
+  return Array.from(
+    new Set(
+      input
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    )
+  );
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/api/profile", async (_req, res) => {
+    const profile = await storage.getUserProfile(DEFAULT_PROFILE_ID);
+
+    if (!profile) {
+      return res.json({
+        id: DEFAULT_PROFILE_ID,
+        skinType: "unknown",
+        hairType: "unknown",
+        sensitivities: [],
+        avoidIngredients: [],
+        knownReactions: [],
+      });
+    }
+
+    return res.json({
+      id: profile.id,
+      skinType: profile.skinType,
+      hairType: profile.hairType,
+      sensitivities: profile.sensitivities,
+      avoidIngredients: profile.avoidIngredients,
+      knownReactions: profile.knownReactions,
+    });
+  });
+
+  app.put("/api/profile", async (req, res) => {
+    const parsed = profilePatchSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Geçersiz profil verisi gönderildi." });
+    }
+
+    const payload = parsed.data;
+
+    const profile = await storage.upsertUserProfile({
+      id: DEFAULT_PROFILE_ID,
+      skinType: payload.skinType,
+      hairType: payload.hairType,
+      sensitivities: normalizeStringArray(payload.sensitivities),
+      avoidIngredients: normalizeStringArray(payload.avoidIngredients),
+      knownReactions: normalizeStringArray(payload.knownReactions),
+    });
+
+    return res.json({
+      id: profile.id,
+      skinType: profile.skinType,
+      hairType: profile.hairType,
+      sensitivities: profile.sensitivities,
+      avoidIngredients: profile.avoidIngredients,
+      knownReactions: profile.knownReactions,
+    });
+  });
+
   app.post("/api/analyze", async (req, res) => {
     const { message, normalizedImages, hasText, hasImages } = normalizeAnalyzeInputs(
       req.body as {
