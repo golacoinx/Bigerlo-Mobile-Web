@@ -11,6 +11,7 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -27,6 +28,7 @@ import { MessageItem, type ChatMessage } from "@/components/chat/MessageItem";
 import { SnapshotStrip } from "@/components/chat/SnapshotStrip";
 import { Composer } from "@/components/chat/Composer";
 import { CameraBottomPanel } from "@/components/chat/CameraBottomPanel";
+import { ProfileMenu } from "@/components/menu/ProfileMenu";
 import {
   createLoadingMessage,
   createUserMessage,
@@ -61,8 +63,10 @@ async function analyzeWithGemini(
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [chatMode, setChatMode] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -279,6 +283,13 @@ export default function HomeScreen() {
     setCameraOpen(false);
   }, []);
 
+  const handleNavigateFromMenu = useCallback(
+    (route: string) => {
+      router.push(route as never);
+    },
+    [router]
+  );
+
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessage }) => <MessageItem item={item} />,
     []
@@ -288,27 +299,41 @@ export default function HomeScreen() {
     <View style={[styles.container, { paddingTop: topPadding }]}> 
       {chatMode ? (
         <View style={styles.chatHeader}>
-          <View style={styles.chatHeaderSpacer} />
-          <TouchableOpacity
-            style={styles.chatHeaderBtn}
-            onPress={handleNewChat}
-            activeOpacity={0.75}
-            testID="new-chat-btn"
-          >
-            <Ionicons
-              name="create-outline"
-              size={18}
-              color={Colors.textPrimary}
-            />
-          </TouchableOpacity>
+          <View style={styles.chatHeaderActions}>
+            <TouchableOpacity
+              style={styles.chatHeaderBtn}
+              onPress={handleNewChat}
+              activeOpacity={0.75}
+              testID="new-chat-btn"
+            >
+              <Ionicons
+                name="create-outline"
+                size={18}
+                color={Colors.textPrimary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profilePhoto}
+              activeOpacity={0.8}
+              onPress={() => setMenuVisible(true)}
+              testID="profile-menu-btn"
+            >
+              <Ionicons name="person" size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <View style={styles.homeHeader}>
-          <TouchableOpacity style={styles.profilePhoto} activeOpacity={0.8}>
+          <View style={styles.headerLeft} />
+          <Text style={styles.brandTitle}>BIGERLO</Text>
+          <TouchableOpacity
+            style={styles.profilePhoto}
+            activeOpacity={0.8}
+            onPress={() => setMenuVisible(true)}
+            testID="profile-menu-btn"
+          >
             <Ionicons name="person" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <Text style={styles.brandTitle}>BIGERLO</Text>
-          <View style={styles.headerRight} />
         </View>
       )}
 
@@ -366,6 +391,12 @@ export default function HomeScreen() {
           onClose={() => setCameraOpen(false)}
         />
       </Modal>
+
+      <ProfileMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onNavigate={handleNavigateFromMenu}
+      />
     </View>
   );
 }
@@ -485,16 +516,20 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     textAlign: "center",
   },
-  headerRight: {
+  headerLeft: {
     width: 40,
   },
 
   chatHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
+    alignItems: "flex-end",
+    paddingHorizontal: 20,
     paddingTop: 6,
     paddingBottom: 10,
+  },
+  chatHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   chatHeaderBtn: {
     width: 38,
@@ -504,10 +539,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  chatHeaderSpacer: {
-    flex: 1,
-  },
-
   body: {
     flex: 1,
     paddingHorizontal: 16,
