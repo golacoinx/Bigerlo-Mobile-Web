@@ -1,5 +1,6 @@
 import { type User, type InsertUser } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { type IDomainStorage, MemDomainStorage } from "./domain-storage";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -8,13 +9,16 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  domain: IDomainStorage;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
+  domain: IDomainStorage;
 
   constructor() {
     this.users = new Map();
+    this.domain = new MemDomainStorage();
   }
 
   async getUser(id: string): Promise<User | undefined> {
