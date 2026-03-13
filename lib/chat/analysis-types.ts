@@ -12,6 +12,23 @@ export type CompatibilityResult = {
   signals: CompatibilitySignal[];
 };
 
+export type PersonalMemorySignal = {
+  ingredient: string;
+  direction: "positive" | "caution";
+  evidenceCount: number;
+  relatedTraits: string[];
+  message: string;
+  confidenceLabel: "limited" | "repeated";
+};
+
+export type PersonalMemory = {
+  status: "insufficient" | "available";
+  summary: string;
+  evidenceLevel: "none" | "limited" | "moderate";
+  signals: PersonalMemorySignal[];
+  matchedSignals?: PersonalMemorySignal[];
+};
+
 export type StructuredAnalysis = {
   productId?: string;
   product: {
@@ -36,6 +53,7 @@ export type StructuredAnalysis = {
     cautionNote?: string;
   };
   compatibility?: CompatibilityResult;
+  memory?: PersonalMemory;
 };
 
 export type AnalyzeApiResponse = {

@@ -1,7 +1,11 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Colors from "@/constants/colors";
-import type { CompatibilityResult, StructuredAnalysis } from "@/lib/chat/analysis-types";
+import type {
+  CompatibilityResult,
+  PersonalMemorySignal,
+  StructuredAnalysis,
+} from "@/lib/chat/analysis-types";
 
 function getSuitabilityMeta(suitability: StructuredAnalysis["analysis"]["suitability"]) {
   switch (suitability) {
@@ -45,6 +49,14 @@ function formatProductType(type: StructuredAnalysis["product"]["type"]) {
   return map[type] ?? "Diğer";
 }
 
+function getMemorySignalMeta(direction: PersonalMemorySignal["direction"]) {
+  if (direction === "caution") {
+    return { icon: "⚠", color: "#B42318", label: "Önceki deneyimde dikkat" };
+  }
+
+  return { icon: "✓", color: "#027A48", label: "Önceki deneyimde olumlu" };
+}
+
 export function AnalysisResultCard({
   structured,
   onTrackProduct,
@@ -62,6 +74,9 @@ export function AnalysisResultCard({
   const hasIngredients = ingredients.length > 0;
   const compatibility = structured.compatibility;
   const compatibilityMeta = getCompatibilityMeta(compatibility?.status ?? "unknown");
+  const memory = structured.memory;
+  const memoryMatches = memory?.matchedSignals ?? [];
+  const showMemorySection = memory?.status === "available" && memoryMatches.length > 0;
 
   return (
     <View style={styles.card}>
@@ -88,6 +103,28 @@ export function AnalysisResultCard({
       <View style={[styles.suitabilityBadge, { backgroundColor: suitability.bg }]}> 
         <Text style={[styles.suitabilityText, { color: suitability.fg }]}>{suitability.label}</Text>
       </View>
+
+      {showMemorySection ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Personal memory</Text>
+          <Text style={styles.memorySummary}>
+            {memory.evidenceLevel === "limited"
+              ? "Bu sinyaller sınırlı geçmiş veriye dayanır."
+              : "Bu sinyaller takip geçmişinizde tekrar eden desenlere dayanır."}
+          </Text>
+          {memoryMatches.slice(0, 2).map((signal) => {
+            const meta = getMemorySignalMeta(signal.direction);
+            return (
+              <View key={`${signal.direction}-${signal.ingredient}`} style={styles.memorySignalItem}>
+                <Text style={[styles.memorySignalTitle, { color: meta.color }]}>
+                  {meta.icon} {meta.label}: {signal.ingredient}
+                </Text>
+                <Text style={styles.memorySignalMessage}>{signal.message}</Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
 
       {analysis.summary ? <Text style={styles.summary}>{analysis.summary}</Text> : null}
 
@@ -182,6 +219,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: Colors.textPrimary,
+  },
+  memorySummary: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 17,
+  },
+  memorySignalItem: {
+    borderRadius: 10,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  memorySignalTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  memorySignalMessage: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.textSecondary,
   },
   section: {
     gap: 6,

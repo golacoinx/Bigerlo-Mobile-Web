@@ -22,6 +22,7 @@ import {
 } from "./tracking/tracking-service";
 import { listDueOrUpcomingCheckIns, submitCheckInFeedback } from "./feedback/feedback-service";
 import { listReminders } from "./reminders/reminder-service";
+import { derivePersonalMemory, derivePersonalMemoryForAnalyze } from "./memory/memory-service";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -252,6 +253,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/memory", async (req, res) => {
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+      const memory = await derivePersonalMemory(storage.domain, profile.id);
+      return res.json({ memory });
+    } catch (error) {
+      console.error("Memory get error:", error);
+      return res.status(500).json({ error: "Kişisel hafıza verisi alınamadı." });
+    }
+  });
+
   app.post("/api/analyze", async (req, res) => {
     const { message, normalizedImages, hasText, hasImages } = normalizeAnalyzeInputs(
       req.body as {
@@ -341,12 +354,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ingredients: structuredResult.structured.ingredients,
       });
 
+      const memory = profile
+        ? await derivePersonalMemoryForAnalyze({
+            storage: storage.domain,
+            profileId: profile.id,
+            analyzedIngredients: structuredResult.structured.ingredients,
+          })
+        : undefined;
+
       return res.json({
         text,
         structured: {
           ...structuredResult.structured,
           productId: productRecord.id,
           compatibility,
+          memory,
         },
       });
     } catch (err) {

@@ -12,7 +12,12 @@ import {
 import { Stack } from "expo-router";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
-import type { CheckInItem, ReminderItem, TrackingSummary } from "@/lib/chat/analysis-types";
+import type {
+  CheckInItem,
+  PersonalMemory,
+  ReminderItem,
+  TrackingSummary,
+} from "@/lib/chat/analysis-types";
 
 type UserProfile = {
   id: string;
@@ -42,6 +47,11 @@ type CheckInPayload = {
 
 type ReminderPayload = {
   reminders?: ReminderItem[];
+  error?: string;
+};
+
+type MemoryPayload = {
+  memory?: PersonalMemory;
   error?: string;
 };
 
@@ -84,6 +94,7 @@ export default function ProfileScreen() {
   const [trackings, setTrackings] = useState<TrackingSummary[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInItem[]>([]);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [memory, setMemory] = useState<PersonalMemory | null>(null);
   const [selectedCheckInKey, setSelectedCheckInKey] = useState<string | null>(null);
 
   const [itch, setItch] = useState("");
@@ -97,6 +108,7 @@ export default function ProfileScreen() {
   const trackingUrl = useMemo(() => new URL("/api/tracking", getApiUrl()).toString(), []);
   const checkInsUrl = useMemo(() => new URL("/api/check-ins", getApiUrl()).toString(), []);
   const remindersUrl = useMemo(() => new URL("/api/reminders", getApiUrl()).toString(), []);
+  const memoryUrl = useMemo(() => new URL("/api/memory", getApiUrl()).toString(), []);
   const checkInsSubmitUrl = useMemo(
     () => new URL("/api/check-ins/submit", getApiUrl()).toString(),
     [],
@@ -135,9 +147,22 @@ export default function ProfileScreen() {
     }
   }, [remindersUrl]);
 
+  const loadMemory = useCallback(async () => {
+    try {
+      const response = await fetch(memoryUrl);
+      const data = (await response.json()) as MemoryPayload;
+      if (!response.ok || !data.memory) {
+        throw new Error(data.error ?? "Kişisel hafıza verisi alınamadı.");
+      }
+      setMemory(data.memory);
+    } catch {
+      setMemory(null);
+    }
+  }, [memoryUrl]);
+
   const refreshFollowUpData = useCallback(async () => {
-    await Promise.all([loadTrackings(), loadCheckIns(), loadReminders()]);
-  }, [loadTrackings, loadCheckIns, loadReminders]);
+    await Promise.all([loadTrackings(), loadCheckIns(), loadReminders(), loadMemory()]);
+  }, [loadTrackings, loadCheckIns, loadReminders, loadMemory]);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -332,6 +357,27 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                   </View>
                 ))
+              )}
+            </View>
+
+            <View style={styles.trackingSection}>
+              <Text style={styles.sectionHeader}>Personal memory</Text>
+              {!memory ? (
+                <Text style={styles.helper}>Kişisel hafıza verisi şu an alınamadı.</Text>
+              ) : memory.status === "insufficient" ? (
+                <Text style={styles.helper}>{memory.summary}</Text>
+              ) : (
+                <>
+                  <Text style={styles.helper}>{memory.summary}</Text>
+                  {memory.signals.slice(0, 3).map((signal) => (
+                    <View key={`${signal.direction}-${signal.ingredient}`} style={styles.trackingItem}>
+                      <Text style={styles.trackingTitle}>
+                        {signal.direction === "caution" ? "⚠" : "✓"} {signal.ingredient}
+                      </Text>
+                      <Text style={styles.helper}>{signal.message}</Text>
+                    </View>
+                  ))}
+                </>
               )}
             </View>
 
