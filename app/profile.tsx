@@ -12,7 +12,7 @@ import {
 import { Stack } from "expo-router";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
-import type { CheckInItem, TrackingSummary } from "@/lib/chat/analysis-types";
+import type { CheckInItem, ReminderItem, TrackingSummary } from "@/lib/chat/analysis-types";
 
 type UserProfile = {
   id: string;
@@ -40,6 +40,11 @@ type CheckInPayload = {
   error?: string;
 };
 
+type ReminderPayload = {
+  reminders?: ReminderItem[];
+  error?: string;
+};
+
 function toMultiline(value: string[]) {
   return value.join("\n");
 }
@@ -61,6 +66,10 @@ function parseScale(value: string, min: number, max: number): number | null {
   return rounded;
 }
 
+function makeCheckInKey(trackingId: string, dayOffset: number) {
+  return `${trackingId}-${dayOffset}`;
+}
+
 export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +83,8 @@ export default function ProfileScreen() {
 
   const [trackings, setTrackings] = useState<TrackingSummary[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInItem[]>([]);
-  const [selectedCheckInId, setSelectedCheckInId] = useState<string | null>(null);
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [selectedCheckInKey, setSelectedCheckInKey] = useState<string | null>(null);
 
   const [itch, setItch] = useState("");
   const [dryness, setDryness] = useState("");
@@ -86,6 +96,7 @@ export default function ProfileScreen() {
   const profileUrl = useMemo(() => new URL("/api/profile", getApiUrl()).toString(), []);
   const trackingUrl = useMemo(() => new URL("/api/tracking", getApiUrl()).toString(), []);
   const checkInsUrl = useMemo(() => new URL("/api/check-ins", getApiUrl()).toString(), []);
+  const remindersUrl = useMemo(() => new URL("/api/reminders", getApiUrl()).toString(), []);
   const checkInsSubmitUrl = useMemo(
     () => new URL("/api/check-ins/submit", getApiUrl()).toString(),
     [],
@@ -95,9 +106,7 @@ export default function ProfileScreen() {
     try {
       const response = await fetch(trackingUrl);
       const data = (await response.json()) as TrackingPayload;
-      if (!response.ok) {
-        throw new Error(data.error ?? "Takip listesi alınamadı.");
-      }
+      if (!response.ok) throw new Error(data.error ?? "Takip listesi alınamadı.");
       setTrackings(data.trackings ?? []);
     } catch {
       setTrackings([]);
@@ -108,14 +117,27 @@ export default function ProfileScreen() {
     try {
       const response = await fetch(checkInsUrl);
       const data = (await response.json()) as CheckInPayload;
-      if (!response.ok) {
-        throw new Error(data.error ?? "Check-in listesi alınamadı.");
-      }
+      if (!response.ok) throw new Error(data.error ?? "Check-in listesi alınamadı.");
       setCheckIns(data.checkIns ?? []);
     } catch {
       setCheckIns([]);
     }
   }, [checkInsUrl]);
+
+  const loadReminders = useCallback(async () => {
+    try {
+      const response = await fetch(remindersUrl);
+      const data = (await response.json()) as ReminderPayload;
+      if (!response.ok) throw new Error(data.error ?? "Hatırlatıcılar alınamadı.");
+      setReminders(data.reminders ?? []);
+    } catch {
+      setReminders([]);
+    }
+  }, [remindersUrl]);
+
+  const refreshFollowUpData = useCallback(async () => {
+    await Promise.all([loadTrackings(), loadCheckIns(), loadReminders()]);
+  }, [loadTrackings, loadCheckIns, loadReminders]);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -139,8 +161,8 @@ export default function ProfileScreen() {
   }, [profileUrl]);
 
   useEffect(() => {
-    void Promise.all([loadProfile(), loadTrackings(), loadCheckIns()]);
-  }, [loadProfile, loadTrackings, loadCheckIns]);
+    void Promise.all([loadProfile(), refreshFollowUpData()]);
+  }, [loadProfile, refreshFollowUpData]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -166,7 +188,7 @@ export default function ProfileScreen() {
       setSensitivitiesText(toMultiline(data.profile.sensitivities ?? []));
       setAvoidIngredientsText(toMultiline(data.profile.avoidIngredients ?? []));
       setKnownReactionsText(toMultiline(data.profile.knownReactions ?? []));
-      await Promise.all([loadTrackings(), loadCheckIns()]);
+      await refreshFollowUpData();
     } catch (error) {
       Alert.alert("Hata", error instanceof Error ? error.message : "Profil kaydedilemedi.");
     } finally {
@@ -176,16 +198,27 @@ export default function ProfileScreen() {
     avoidIngredientsText,
     hairType,
     knownReactionsText,
-    loadCheckIns,
-    loadTrackings,
     profileUrl,
+    refreshFollowUpData,
     sensitivitiesText,
     skinType,
   ]);
 
+  const handleReminderAction = useCallback((reminder: ReminderItem) => {
+    setSelectedCheckInKey(makeCheckInKey(reminder.trackingId, reminder.dayOffset));
+  }, []);
+
   const handleSubmitCheckIn = useCallback(async () => {
-    const selected = checkIns.find((item) => item.trackingId === selectedCheckInId);
-    if (!selected) return;
+    if (!selectedCheckInKey) return;
+
+    const selected = checkIns.find(
+      (item) => makeCheckInKey(item.trackingId, item.dayOffset) === selectedCheckInKey,
+    );
+
+    if (!selected) {
+      Alert.alert("Hata", "Seçili check-in bulunamadı.");
+      return;
+    }
 
     const payload = {
       trackingId: selected.trackingId,
@@ -217,14 +250,14 @@ export default function ProfileScreen() {
       }
 
       Alert.alert("Kaydedildi", "Check-in geri bildiriminiz kaydedildi.");
-      setSelectedCheckInId(null);
+      setSelectedCheckInKey(null);
       setItch("");
       setDryness("");
       setReaction("");
       setRelief("");
       setSatisfaction("");
       setNote("");
-      await Promise.all([loadTrackings(), loadCheckIns()]);
+      await refreshFollowUpData();
     } catch (error) {
       Alert.alert("Hata", error instanceof Error ? error.message : "Check-in kaydedilemedi.");
     } finally {
@@ -235,14 +268,15 @@ export default function ProfileScreen() {
     checkInsSubmitUrl,
     dryness,
     itch,
-    loadCheckIns,
-    loadTrackings,
     note,
     reaction,
     relief,
+    refreshFollowUpData,
     satisfaction,
-    selectedCheckInId,
+    selectedCheckInKey,
   ]);
+
+  const dueReminderCount = reminders.filter((item) => item.status === "due").length;
 
   return (
     <>
@@ -262,6 +296,45 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <View style={styles.card}>
+            <View style={styles.reminderBanner}>
+              <Text style={styles.reminderBannerTitle}>Feedback reminders</Text>
+              <Text style={styles.reminderBannerText}>
+                {dueReminderCount > 0
+                  ? `${dueReminderCount} ürün için geri bildirim zamanı geldi.`
+                  : "Şu anda acil geri bildirim gerektiren ürün yok."}
+              </Text>
+            </View>
+
+            <View style={styles.trackingSection}>
+              <Text style={styles.sectionHeader}>Reminder feed</Text>
+              {reminders.length === 0 ? (
+                <Text style={styles.helper}>Aktif hatırlatıcı bulunmuyor.</Text>
+              ) : (
+                reminders.slice(0, 6).map((reminder) => (
+                  <View
+                    key={reminder.reminderId}
+                    style={[
+                      styles.trackingItem,
+                      reminder.status === "due" && styles.trackingItemDue,
+                    ]}
+                  >
+                    <Text style={styles.trackingTitle}>{reminder.productName}</Text>
+                    <Text style={styles.trackingMeta}>
+                      {reminder.productBrand} · {reminder.label} · {new Date(reminder.dueAt).toLocaleDateString("tr-TR")}
+                    </Text>
+                    <Text style={styles.helper}>{reminder.message}</Text>
+                    <TouchableOpacity
+                      style={styles.inlineActionBtn}
+                      onPress={() => handleReminderAction(reminder)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.inlineActionText}>Submit check-in</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+
             <Field label="Skin type" value={skinType} onChangeText={setSkinType} />
             <Field label="Hair type" value={hairType} onChangeText={setHairType} />
             <Field
@@ -307,51 +380,61 @@ export default function ProfileScreen() {
               {checkIns.length === 0 ? (
                 <Text style={styles.helper}>Şu anda bekleyen check-in yok.</Text>
               ) : (
-                checkIns.slice(0, 6).map((checkIn) => (
-                  <View key={`${checkIn.trackingId}-${checkIn.dayOffset}`} style={styles.trackingItem}>
-                    <Text style={styles.trackingTitle}>
-                      {checkIn.productName} · {checkIn.checkInLabel}
-                    </Text>
-                    <Text style={styles.trackingMeta}>
-                      {checkIn.productBrand} · {checkIn.status} · {new Date(checkIn.dueAt).toLocaleDateString("tr-TR")}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.inlineActionBtn}
-                      onPress={() => setSelectedCheckInId(checkIn.trackingId)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.inlineActionText}>Check-in gönder</Text>
-                    </TouchableOpacity>
+                checkIns.slice(0, 6).map((checkIn) => {
+                  const checkInKey = makeCheckInKey(checkIn.trackingId, checkIn.dayOffset);
 
-                    {selectedCheckInId === checkIn.trackingId ? (
-                      <View style={styles.checkInForm}>
-                        <Text style={styles.helper}>Skorlar: itch/dryness/reaction/relief 0-3, satisfaction 1-5</Text>
-                        <ScaleInput label="itch" value={itch} onChangeText={setItch} />
-                        <ScaleInput label="dryness" value={dryness} onChangeText={setDryness} />
-                        <ScaleInput label="reaction" value={reaction} onChangeText={setReaction} />
-                        <ScaleInput label="relief" value={relief} onChangeText={setRelief} />
-                        <ScaleInput label="satisfaction" value={satisfaction} onChangeText={setSatisfaction} />
-                        <Field
-                          label="Note"
-                          value={note}
-                          onChangeText={setNote}
-                          multiline
-                          helperText="Opsiyonel kısa not"
-                        />
-                        <TouchableOpacity
-                          style={[styles.inlineActionBtn, submittingCheckIn && styles.saveButtonDisabled]}
-                          onPress={handleSubmitCheckIn}
-                          disabled={submittingCheckIn}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.inlineActionText}>
-                            {submittingCheckIn ? "Gönderiliyor..." : "Check-in kaydet"}
+                  return (
+                    <View key={checkInKey} style={styles.trackingItem}>
+                      <Text style={styles.trackingTitle}>
+                        {checkIn.productName} · {checkIn.checkInLabel}
+                      </Text>
+                      <Text style={styles.trackingMeta}>
+                        {checkIn.productBrand} · {checkIn.status} · {new Date(checkIn.dueAt).toLocaleDateString("tr-TR")}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.inlineActionBtn}
+                        onPress={() => setSelectedCheckInKey(checkInKey)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.inlineActionText}>Check-in gönder</Text>
+                      </TouchableOpacity>
+
+                      {selectedCheckInKey === checkInKey ? (
+                        <View style={styles.checkInForm}>
+                          <Text style={styles.helper}>
+                            Skorlar: itch/dryness/reaction/relief 0-3, satisfaction 1-5
                           </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
-                  </View>
-                ))
+                          <ScaleInput label="itch" value={itch} onChangeText={setItch} />
+                          <ScaleInput label="dryness" value={dryness} onChangeText={setDryness} />
+                          <ScaleInput label="reaction" value={reaction} onChangeText={setReaction} />
+                          <ScaleInput label="relief" value={relief} onChangeText={setRelief} />
+                          <ScaleInput
+                            label="satisfaction"
+                            value={satisfaction}
+                            onChangeText={setSatisfaction}
+                          />
+                          <Field
+                            label="Note"
+                            value={note}
+                            onChangeText={setNote}
+                            multiline
+                            helperText="Opsiyonel kısa not"
+                          />
+                          <TouchableOpacity
+                            style={[styles.inlineActionBtn, submittingCheckIn && styles.saveButtonDisabled]}
+                            onPress={handleSubmitCheckIn}
+                            disabled={submittingCheckIn}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.inlineActionText}>
+                              {submittingCheckIn ? "Gönderiliyor..." : "Check-in kaydet"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })
               )}
             </View>
 
@@ -451,6 +534,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  reminderBanner: {
+    borderRadius: 12,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  reminderBannerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+    marginBottom: 2,
+  },
+  reminderBannerText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
   fieldWrap: {
     marginBottom: 14,
   },
@@ -495,6 +595,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 6,
+  },
+  trackingItemDue: {
+    borderWidth: 1,
+    borderColor: "#B42318",
+    backgroundColor: "#FEF3F2",
   },
   trackingTitle: {
     fontSize: 13,

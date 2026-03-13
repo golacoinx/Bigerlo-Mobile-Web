@@ -21,6 +21,7 @@ import {
   startProductTracking,
 } from "./tracking/tracking-service";
 import { listDueOrUpcomingCheckIns, submitCheckInFeedback } from "./feedback/feedback-service";
+import { listReminders } from "./reminders/reminder-service";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -195,6 +196,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Check-in list error:", error);
       return res.status(500).json({ error: "Check-in listesi alınamadı." });
+    }
+  });
+
+
+  app.get("/api/reminders", async (req, res) => {
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+      const reminders = await listReminders(storage.domain, profile.id);
+      return res.json({ reminders });
+    } catch (error) {
+      console.error("Reminder list error:", error);
+      return res.status(500).json({ error: "Hatırlatıcılar alınamadı." });
     }
   });
 

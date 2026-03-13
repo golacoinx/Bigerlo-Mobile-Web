@@ -68,3 +68,18 @@ export type CheckInItem = {
   checkInLabel: string;
   status: "due" | "upcoming";
 };
+
+
+export type ReminderItem = {
+  reminderId: string;
+  trackingId: string;
+  dayOffset: number;
+  productId: string;
+  productName: string;
+  productBrand: string;
+  dueAt: string;
+  status: "due" | "upcoming";
+  severity: "high" | "medium";
+  label: string;
+  message: string;
+};
