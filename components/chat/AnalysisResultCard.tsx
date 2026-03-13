@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Colors from "@/constants/colors";
-import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
+import type { CompatibilityResult, StructuredAnalysis } from "@/lib/chat/analysis-types";
 
 function getSuitabilityMeta(suitability: StructuredAnalysis["analysis"]["suitability"]) {
   switch (suitability) {
@@ -13,6 +13,20 @@ function getSuitabilityMeta(suitability: StructuredAnalysis["analysis"]["suitabi
       return { label: "Çok Uygun Değil", bg: "#FEE4E2", fg: "#B42318" };
     default:
       return { label: "Belirsiz", bg: Colors.cardInner, fg: Colors.textSecondary };
+  }
+}
+
+
+function getCompatibilityMeta(status: CompatibilityResult["status"]) {
+  switch (status) {
+    case "compatible":
+      return { icon: "✓", label: "Profilinle uyumlu görünüyor", bg: "#ECFDF3", fg: "#027A48" };
+    case "caution":
+      return { icon: "⚠", label: "Profilin için dikkat gerektiriyor", bg: "#FFFAEB", fg: "#B54708" };
+    case "conflict":
+      return { icon: "✕", label: "Profilinle çatışan içerik var", bg: "#FEF3F2", fg: "#B42318" };
+    default:
+      return { icon: "•", label: "Uyumluluk için daha fazla veri gerekli", bg: Colors.card, fg: Colors.textSecondary };
   }
 }
 
@@ -44,6 +58,8 @@ export function AnalysisResultCard({
   const hasRealBrand = product.brand && product.brand.toLowerCase() !== "bilinmiyor";
   const hasRisks = analysis.risks.length > 0;
   const hasIngredients = ingredients.length > 0;
+  const compatibility = structured.compatibility;
+  const compatibilityMeta = getCompatibilityMeta(compatibility?.status ?? "unknown");
 
   return (
     <View style={styles.card}>
@@ -56,9 +72,19 @@ export function AnalysisResultCard({
             {hasRealBrand ? product.brand : "Marka bilinmiyor"} · {formatProductType(product.type)}
           </Text>
         </View>
-        <View style={[styles.suitabilityBadge, { backgroundColor: suitability.bg }]}> 
-          <Text style={[styles.suitabilityText, { color: suitability.fg }]}>{suitability.label}</Text>
-        </View>
+      </View>
+
+      <View style={[styles.compatibilityBox, { backgroundColor: compatibilityMeta.bg }]}> 
+        <Text style={[styles.compatibilityLabel, { color: compatibilityMeta.fg }]}>
+          {compatibilityMeta.icon} Uyumluluk: {compatibilityMeta.label}
+        </Text>
+        {compatibility?.reasons?.slice(0, 2).map((reason, index) => (
+          <Text key={`reason-${index}`} style={[styles.compatibilityReason, { color: compatibilityMeta.fg }]}>• {reason}</Text>
+        ))}
+      </View>
+
+      <View style={[styles.suitabilityBadge, { backgroundColor: suitability.bg }]}> 
+        <Text style={[styles.suitabilityText, { color: suitability.fg }]}>{suitability.label}</Text>
       </View>
 
       {analysis.summary ? <Text style={styles.summary}>{analysis.summary}</Text> : null}
@@ -121,7 +147,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
+  compatibilityBox: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  compatibilityLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  compatibilityReason: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
   suitabilityBadge: {
+    alignSelf: "flex-start",
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 5,

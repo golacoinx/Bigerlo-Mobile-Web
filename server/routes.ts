@@ -14,6 +14,7 @@ import {
   validateAnalyzeRequest,
 } from "./analyze-helpers";
 import { storage } from "./storage";
+import { evaluateRoutineCompatibility } from "./compatibility/compatibility-engine";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -57,6 +58,13 @@ async function getOrCreateProfileForClient(clientKey: string) {
 
   profileIdByClient.set(clientKey, created.id);
   return created;
+}
+
+
+async function getProfileForClientIfExists(clientKey: string) {
+  const profileId = profileIdByClient.get(clientKey);
+  if (!profileId) return undefined;
+  return storage.domain.getUserProfile(profileId);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -163,8 +171,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const structuredResult = parseStructuredAnalyzeResponse(rawText);
       const text = structuredResult.displayText?.trim() || rawText;
+      const profile = await getProfileForClientIfExists(clientKey);
 
-      return res.json({ text, structured: structuredResult.structured });
+      const compatibility = evaluateRoutineCompatibility({
+        ingredients: structuredResult.structured.ingredients,
+        profile: profile
+          ? {
+              sensitivities: profile.sensitivities,
+              avoidIngredients: profile.avoidIngredients,
+              knownReactions: profile.knownReactions,
+            }
+          : undefined,
+      });
+
+      return res.json({
+        text,
+        structured: {
+          ...structuredResult.structured,
+          compatibility,
+        },
+      });
     } catch (err) {
       console.error("Gemini fetch error:", err);
       return res.status(502).json({ error: "API isteği başarısız oldu. Lütfen tekrar deneyin." });
