@@ -20,6 +20,7 @@ import {
   listTrackedProducts,
   startProductTracking,
 } from "./tracking/tracking-service";
+import { listDueOrUpcomingCheckIns, submitCheckInFeedback } from "./feedback/feedback-service";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -66,6 +67,18 @@ const startTrackingSchema = z.object({
       ingredients: z.array(z.string()).optional(),
     })
     .optional(),
+});
+
+
+const checkInSubmitSchema = z.object({
+  trackingId: z.string().min(1),
+  dayOffset: z.number().int().positive(),
+  itch: z.number().int().min(0).max(3).nullable().optional(),
+  dryness: z.number().int().min(0).max(3).nullable().optional(),
+  reaction: z.number().int().min(0).max(3).nullable().optional(),
+  relief: z.number().int().min(0).max(3).nullable().optional(),
+  satisfaction: z.number().int().min(1).max(5).nullable().optional(),
+  note: z.string().max(1200).optional(),
 });
 
 async function getOrCreateProfileForClient(clientKey: string) {
@@ -170,6 +183,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Tracking list error:", error);
       return res.status(500).json({ error: "Tracking listesi alınamadı." });
+    }
+  });
+
+  app.get("/api/check-ins", async (req, res) => {
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+      const checkIns = await listDueOrUpcomingCheckIns(storage.domain, profile.id);
+      return res.json({ checkIns });
+    } catch (error) {
+      console.error("Check-in list error:", error);
+      return res.status(500).json({ error: "Check-in listesi alınamadı." });
+    }
+  });
+
+  app.post("/api/check-ins/submit", async (req, res) => {
+    const parsed = checkInSubmitSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Geçersiz check-in verisi." });
+    }
+
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+
+      const result = await submitCheckInFeedback(storage.domain, {
+        profileId: profile.id,
+        trackingId: parsed.data.trackingId,
+        dayOffset: parsed.data.dayOffset,
+        itch: parsed.data.itch ?? null,
+        dryness: parsed.data.dryness ?? null,
+        reaction: parsed.data.reaction ?? null,
+        relief: parsed.data.relief ?? null,
+        satisfaction: parsed.data.satisfaction ?? null,
+        note: parsed.data.note,
+      });
+
+      return res.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Check-in kaydedilemedi.";
+      if (message === "tracking not found") {
+        return res.status(404).json({ error: "Tracking kaydı bulunamadı." });
+      }
+      if (message === "invalid check-in checkpoint") {
+        return res.status(400).json({ error: "Geçersiz check-in noktası." });
+      }
+      if (message === "check-in already submitted") {
+        return res.status(409).json({ error: "Bu check-in zaten gönderilmiş." });
+      }
+
+      console.error("Check-in submit error:", error);
+      return res.status(500).json({ error: "Check-in kaydedilemedi." });
     }
   });
 

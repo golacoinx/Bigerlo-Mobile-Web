@@ -56,3 +56,15 @@ export type TrackingSummary = {
   nextCheckInAt: string | null;
   checkInSchedule: Array<{ dayOffset: number; dueAt: string }>;
 };
+
+
+export type CheckInItem = {
+  trackingId: string;
+  productId: string;
+  productName: string;
+  productBrand: string;
+  dueAt: string;
+  dayOffset: number;
+  checkInLabel: string;
+  status: "due" | "upcoming";
+};

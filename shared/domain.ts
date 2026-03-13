@@ -73,6 +73,7 @@ export const productTrackingSchema = z.object({
 export const productFeedbackSchema = z.object({
   id: z.string(),
   trackingId: z.string(),
+  checkInDayOffset: z.number().int().positive().optional(),
   submittedAt: z.date(),
   itch: z.number().int().min(0).max(5).nullable(),
   dryness: z.number().int().min(0).max(5).nullable(),
