@@ -9,6 +9,7 @@ import {
   Modal,
   Platform,
   StatusBar,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -291,9 +292,45 @@ export default function HomeScreen() {
     [router]
   );
 
+  const handleTrackProduct = useCallback(async (structured: StructuredAnalysis) => {
+    try {
+      const url = new URL("/api/tracking/start", getApiUrl()).toString();
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: structured.productId,
+          product: {
+            name: structured.product.name,
+            brand: structured.product.brand,
+            type: structured.product.type,
+            ingredients: structured.ingredients,
+          },
+        }),
+      });
+
+      const data = (await response.json()) as { alreadyTracked?: boolean; error?: string };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Ürün takibe eklenemedi.");
+      }
+
+      if (data.alreadyTracked) {
+        Alert.alert("Zaten Takipte", "Bu ürün zaten aktif olarak takip ediliyor.");
+        return;
+      }
+
+      Alert.alert("Takip Başlatıldı", "Ürün takip listenize eklendi.");
+    } catch (error) {
+      Alert.alert("Hata", error instanceof Error ? error.message : "Takip başlatılamadı.");
+    }
+  }, []);
+
   const renderMessage = useCallback(
-    ({ item }: { item: ChatMessage }) => <MessageItem item={item} />,
-    []
+    ({ item }: { item: ChatMessage }) => (
+      <MessageItem item={item} onTrackProduct={handleTrackProduct} />
+    ),
+    [handleTrackProduct]
   );
 
   return (

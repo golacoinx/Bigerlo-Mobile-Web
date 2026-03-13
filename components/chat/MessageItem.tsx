@@ -13,7 +13,13 @@ export type ChatMessage = {
   structuredResult?: StructuredAnalysis;
 };
 
-export function MessageItem({ item }: { item: ChatMessage }) {
+export function MessageItem({
+  item,
+  onTrackProduct,
+}: {
+  item: ChatMessage;
+  onTrackProduct?: (structured: StructuredAnalysis) => void;
+}) {
   const photoUris = item.photoUris ?? [];
   const hasSinglePhoto = photoUris.length === 1;
   const hasMultiplePhotos = photoUris.length > 1;
@@ -69,7 +75,10 @@ export function MessageItem({ item }: { item: ChatMessage }) {
       ) : null}
 
       {!item.isUser && hasUsefulStructuredData && item.structuredResult ? (
-        <AnalysisResultCard structured={item.structuredResult} />
+        <AnalysisResultCard
+          structured={item.structuredResult}
+          onTrackProduct={onTrackProduct}
+        />
       ) : null}
 
       {item.text ? (

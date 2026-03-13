@@ -112,6 +112,7 @@ export const createProductFeedbackInputSchema = productFeedbackSchema.omit({
 export type Product = z.infer<typeof productSchema>;
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;
 export type UserProfile = z.infer<typeof userProfileSchema>;
+export type ProductTrackingStatus = z.infer<typeof productTrackingStatusSchema>;
 export type ProductTracking = z.infer<typeof productTrackingSchema>;
 export type ProductFeedback = z.infer<typeof productFeedbackSchema>;
 

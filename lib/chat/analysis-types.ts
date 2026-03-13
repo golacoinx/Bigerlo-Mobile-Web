@@ -13,6 +13,7 @@ export type CompatibilityResult = {
 };
 
 export type StructuredAnalysis = {
+  productId?: string;
   product: {
     name: string;
     brand: string;
@@ -41,4 +42,17 @@ export type AnalyzeApiResponse = {
   text?: string;
   structured?: StructuredAnalysis;
   error?: string;
+};
+
+
+export type TrackingSummary = {
+  trackingId: string;
+  productId: string;
+  productName: string;
+  productBrand: string;
+  productType: string;
+  status: "planned" | "active" | "paused" | "stopped" | "completed";
+  startedAt: string | null;
+  nextCheckInAt: string | null;
+  checkInSchedule: Array<{ dayOffset: number; dueAt: string }>;
 };

@@ -15,6 +15,11 @@ import {
 } from "./analyze-helpers";
 import { storage } from "./storage";
 import { evaluateRoutineCompatibility } from "./compatibility/compatibility-engine";
+import {
+  findOrCreateProductForTracking,
+  listTrackedProducts,
+  startProductTracking,
+} from "./tracking/tracking-service";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -38,6 +43,29 @@ const profileUpdateSchema = z.object({
   sensitivities: arrayFieldSchema.optional(),
   avoidIngredients: arrayFieldSchema.optional(),
   knownReactions: arrayFieldSchema.optional(),
+});
+
+const productTypeSchema = z.enum([
+  "cleanser",
+  "serum",
+  "moisturizer",
+  "sunscreen",
+  "treatment",
+  "hair-care",
+  "cleaning",
+  "other",
+]);
+
+const startTrackingSchema = z.object({
+  productId: z.string().min(1).optional(),
+  product: z
+    .object({
+      name: z.string().min(1),
+      brand: z.string().min(1),
+      type: productTypeSchema,
+      ingredients: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 async function getOrCreateProfileForClient(clientKey: string) {
@@ -99,6 +127,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Profile update error:", error);
       return res.status(500).json({ error: "Profil güncellenemedi." });
+    }
+  });
+
+  app.post("/api/tracking/start", async (req, res) => {
+    const parsed = startTrackingSchema.safeParse(req.body ?? {});
+    if (!parsed.success || (!parsed.data.productId && !parsed.data.product)) {
+      return res.status(400).json({ error: "productId is required" });
+    }
+
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+
+      const result = await startProductTracking(storage.domain, {
+        profileId: profile.id,
+        productId: parsed.data.productId,
+        product: parsed.data.product,
+      });
+
+      return res.json({ tracking: result.tracking, alreadyTracked: result.alreadyTracked });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Tracking başlatılamadı.";
+      if (message === "productId is required") {
+        return res.status(400).json({ error: message });
+      }
+      if (message === "product not found") {
+        return res.status(404).json({ error: "Product bulunamadı." });
+      }
+
+      console.error("Tracking start error:", error);
+      return res.status(500).json({ error: "Tracking başlatılamadı." });
+    }
+  });
+
+  app.get("/api/tracking", async (req, res) => {
+    try {
+      const clientKey = getClientThrottleKey(req);
+      const profile = await getOrCreateProfileForClient(clientKey);
+      const trackings = await listTrackedProducts(storage.domain, profile.id);
+      return res.json({ trackings });
+    } catch (error) {
+      console.error("Tracking list error:", error);
+      return res.status(500).json({ error: "Tracking listesi alınamadı." });
     }
   });
 
@@ -184,10 +255,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : undefined,
       });
 
+      const productRecord = await findOrCreateProductForTracking(storage.domain, {
+        name: structuredResult.structured.product.name,
+        brand: structuredResult.structured.product.brand,
+        type: structuredResult.structured.product.type,
+        ingredients: structuredResult.structured.ingredients,
+      });
+
       return res.json({
         text,
         structured: {
           ...structuredResult.structured,
+          productId: productRecord.id,
           compatibility,
         },
       });

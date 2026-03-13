@@ -12,6 +12,7 @@ import {
 import { Stack } from "expo-router";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
+import type { TrackingSummary } from "@/lib/chat/analysis-types";
 
 type UserProfile = {
   id: string;
@@ -26,6 +27,11 @@ type UserProfile = {
 
 type ProfilePayload = {
   profile?: UserProfile;
+  error?: string;
+};
+
+type TrackingPayload = {
+  trackings?: TrackingSummary[];
   error?: string;
 };
 
@@ -48,8 +54,24 @@ export default function ProfileScreen() {
   const [sensitivitiesText, setSensitivitiesText] = useState("");
   const [avoidIngredientsText, setAvoidIngredientsText] = useState("");
   const [knownReactionsText, setKnownReactionsText] = useState("");
+  const [trackings, setTrackings] = useState<TrackingSummary[]>([]);
 
   const profileUrl = useMemo(() => new URL("/api/profile", getApiUrl()).toString(), []);
+  const trackingUrl = useMemo(() => new URL("/api/tracking", getApiUrl()).toString(), []);
+
+  const loadTrackings = useCallback(async () => {
+    try {
+      const response = await fetch(trackingUrl);
+      const data = (await response.json()) as TrackingPayload;
+      if (!response.ok) {
+        throw new Error(data.error ?? "Takip listesi alınamadı.");
+      }
+
+      setTrackings(data.trackings ?? []);
+    } catch {
+      setTrackings([]);
+    }
+  }, [trackingUrl]);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -65,16 +87,17 @@ export default function ProfileScreen() {
       setSensitivitiesText(toMultiline(data.profile.sensitivities ?? []));
       setAvoidIngredientsText(toMultiline(data.profile.avoidIngredients ?? []));
       setKnownReactionsText(toMultiline(data.profile.knownReactions ?? []));
+      await loadTrackings();
     } catch (error) {
       Alert.alert("Hata", error instanceof Error ? error.message : "Profil yüklenemedi.");
     } finally {
       setLoading(false);
     }
-  }, [profileUrl]);
+  }, [profileUrl, loadTrackings]);
 
   useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+    void Promise.all([loadProfile(), loadTrackings()]);
+  }, [loadProfile, loadTrackings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -100,6 +123,7 @@ export default function ProfileScreen() {
       setSensitivitiesText(toMultiline(data.profile.sensitivities ?? []));
       setAvoidIngredientsText(toMultiline(data.profile.avoidIngredients ?? []));
       setKnownReactionsText(toMultiline(data.profile.knownReactions ?? []));
+      await loadTrackings();
     } catch (error) {
       Alert.alert("Hata", error instanceof Error ? error.message : "Profil kaydedilemedi.");
     } finally {
@@ -112,6 +136,7 @@ export default function ProfileScreen() {
     profileUrl,
     sensitivitiesText,
     skinType,
+    loadTrackings,
   ]);
 
   return (
@@ -156,6 +181,22 @@ export default function ProfileScreen() {
               helperText="Bilinen reaksiyon veya tetikleyicileri ekleyin."
             />
 
+
+            <View style={styles.trackingSection}>
+              <Text style={styles.sectionHeader}>Tracked products</Text>
+              {trackings.length === 0 ? (
+                <Text style={styles.helper}>Henüz takip edilen ürün yok.</Text>
+              ) : (
+                trackings.slice(0, 5).map((tracking) => (
+                  <View key={tracking.trackingId} style={styles.trackingItem}>
+                    <Text style={styles.trackingTitle}>{tracking.productName}</Text>
+                    <Text style={styles.trackingMeta}>
+                      {tracking.productBrand} · {tracking.status} · Sonraki kontrol: {tracking.nextCheckInAt ? new Date(tracking.nextCheckInAt).toLocaleDateString("tr-TR") : "-"}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
             <TouchableOpacity
               style={[styles.saveButton, saving && styles.saveButtonDisabled]}
               onPress={handleSave}
@@ -253,6 +294,32 @@ const styles = StyleSheet.create({
   },
   helper: {
     marginTop: 6,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  trackingSection: {
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 8,
+  },
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  trackingItem: {
+    borderRadius: 10,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  trackingTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+  },
+  trackingMeta: {
     fontSize: 12,
     color: Colors.textSecondary,
   },

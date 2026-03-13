@@ -47,8 +47,10 @@ function formatProductType(type: StructuredAnalysis["product"]["type"]) {
 
 export function AnalysisResultCard({
   structured,
+  onTrackProduct,
 }: {
   structured: StructuredAnalysis;
+  onTrackProduct?: (structured: StructuredAnalysis) => void;
 }) {
   const { product, ingredients, analysis } = structured;
   const suitability = getSuitabilityMeta(analysis.suitability);
@@ -112,7 +114,12 @@ export function AnalysisResultCard({
 
       <View style={styles.footerRow}>
         <Text style={styles.confidence}>Güven düzeyi: %{Math.round(confidence * 100)}</Text>
-        <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.ctaBtn, !onTrackProduct && styles.ctaBtnDisabled]}
+          activeOpacity={0.8}
+          onPress={() => onTrackProduct?.(structured)}
+          disabled={!onTrackProduct}
+        >
           <Text style={styles.ctaText}>Track this product</Text>
         </TouchableOpacity>
       </View>
@@ -225,6 +232,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.black,
     paddingHorizontal: 10,
     paddingVertical: 7,
+  },
+  ctaBtnDisabled: {
+    opacity: 0.6,
   },
   ctaText: {
     fontSize: 12,
