@@ -385,10 +385,45 @@ export default function HomeScreen() {
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           style={styles.messageList}
-          contentContainerStyle={[styles.messageListContent, { paddingBottom: 12 }]}
+          contentContainerStyle={[
+            styles.messageListContent,
+            { paddingBottom: 12 },
+            messages.length === 0 && !chatMode ? styles.messageListContentEmpty : null,
+          ]}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            !chatMode ? (
+              <View style={styles.cameraFirstIntro}>
+                <Text style={styles.cameraFirstEyebrow}>CAMERA-FIRST ANALYZE</Text>
+                <Text style={styles.cameraFirstTitle}>Ürünü tara, sorunu yaz, net cevap al.</Text>
+                <Text style={styles.cameraFirstDescription}>
+                  Önce fotoğraf ekleyin, ardından içerik güvenliği, uyumluluk ve kişisel riskler için
+                  analiz alın.
+                </Text>
+
+                <View style={styles.cameraFirstActions}>
+                  <TouchableOpacity
+                    style={styles.cameraFirstPrimaryBtn}
+                    onPress={handleCameraPress}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="camera" size={18} color={Colors.white} />
+                    <Text style={styles.cameraFirstPrimaryText}>Kamerayı Aç</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cameraFirstSecondaryBtn}
+                    onPress={handleGalleryPress}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="images-outline" size={17} color={Colors.textPrimary} />
+                    <Text style={styles.cameraFirstSecondaryText}>Galeriden Ekle</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null
+          }
         />
 
         {snapshots.length > 0 ? (
@@ -585,6 +620,71 @@ const styles = StyleSheet.create({
   messageListContent: {
     paddingTop: 6,
     gap: 8,
+  },
+  messageListContentEmpty: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+
+  cameraFirstIntro: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    padding: 16,
+    gap: 8,
+  },
+  cameraFirstEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: Colors.textSecondary,
+  },
+  cameraFirstTitle: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  cameraFirstDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.textSecondary,
+  },
+  cameraFirstActions: {
+    marginTop: 4,
+    flexDirection: "row",
+    gap: 8,
+  },
+  cameraFirstPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.black,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  cameraFirstPrimaryText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.white,
+  },
+  cameraFirstSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  cameraFirstSecondaryText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.textPrimary,
   },
 
 
