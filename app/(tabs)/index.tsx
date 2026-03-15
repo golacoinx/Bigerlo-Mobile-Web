@@ -1,3 +1,4 @@
+import { BigerloHomeV2 } from "@/components/home/BigerloHomeV2";
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   StyleSheet,
@@ -64,7 +65,7 @@ async function analyzeWithGemini(
   return { text: data.text ?? "Yanıt alınamadı.", structured: data.structured };
 }
 
-export default function HomeScreen() {
+function LegacyHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [chatMode, setChatMode] = useState(false);
@@ -658,3 +659,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
   },
 });
+
+
+export default function HomeScreenEntry() {
+  const useHomeV2 = true;
+  return useHomeV2 ? <BigerloHomeV2 /> : <LegacyHomeScreen />;
+}
