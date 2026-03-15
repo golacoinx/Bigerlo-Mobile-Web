@@ -40,8 +40,6 @@ import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis
 
 const SCAN_BOX_SIZE = 280;
 
-const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 60;
-
 async function analyzeWithGemini(
   message: string,
   images: AnalyzeImage[]
@@ -83,8 +81,7 @@ export default function HomeScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPadding =
-    TAB_BAR_HEIGHT + (Platform.OS === "web" ? 34 : insets.bottom);
+  const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
 
   useEffect(() => {
     if (!messages.length) return;
