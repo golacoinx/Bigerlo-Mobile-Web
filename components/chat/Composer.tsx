@@ -25,10 +25,9 @@ export function Composer({
   inputRef,
 }: ComposerProps) {
   const hasText = Boolean(inputText.trim());
-  const canSend = hasText && !isSending;
 
   return (
-    <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}> 
+    <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
       <View style={styles.inputContainer}>
         <TouchableOpacity
           style={styles.cameraInlineBtn}
@@ -54,35 +53,36 @@ export function Composer({
           testID="message-input"
         />
 
-        <TouchableOpacity style={styles.micInlineBtn} activeOpacity={0.75} testID="mic-btn">
-          <Ionicons name="mic-outline" size={18} color={Colors.textSecondary} />
-        </TouchableOpacity>
+        {hasText ? (
+          <TouchableOpacity
+            style={[styles.rightActionBtn, isSending && styles.rightActionBtnDisabled]}
+            onPress={onSend}
+            disabled={isSending}
+            activeOpacity={0.8}
+            testID="send-btn"
+          >
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={isSending ? Colors.textSecondary : Colors.white}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.rightActionBtn, styles.micActionBtn]}
+            activeOpacity={0.75}
+            testID="mic-btn"
+          >
+            <Ionicons name="mic-outline" size={18} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
-
-      {hasText ? (
-        <TouchableOpacity
-          style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
-          onPress={onSend}
-          disabled={!canSend}
-          activeOpacity={0.8}
-          testID="send-btn"
-        >
-          <Ionicons
-            name="arrow-up"
-            size={18}
-            color={canSend ? Colors.white : Colors.textSecondary}
-          />
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 10,
     paddingTop: 8,
     paddingHorizontal: 2,
   },
@@ -114,23 +114,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(43, 129, 255, 0.14)",
     marginLeft: 4,
   },
-  micInlineBtn: {
+  rightActionBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Colors.black,
     marginRight: 4,
   },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.black,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonDisabled: {
+  rightActionBtnDisabled: {
     backgroundColor: Colors.cardInner,
+  },
+  micActionBtn: {
+    backgroundColor: "transparent",
   },
 });
