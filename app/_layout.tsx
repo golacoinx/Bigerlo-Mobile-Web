@@ -12,11 +12,7 @@ import { queryClient } from "@/lib/query-client";
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    </Stack>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
 
 export default function RootLayout() {
