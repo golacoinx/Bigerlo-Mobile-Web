@@ -329,6 +329,16 @@ export default function HomeScreen() {
     [handleTrackProduct]
   );
 
+  const latestStructuredResult = [...messages]
+    .reverse()
+    .find((message) => Boolean(message.structuredResult))?.structuredResult;
+
+  const riskItems = latestStructuredResult?.analysis.risks ?? [];
+  const compatibilityReasons = latestStructuredResult?.compatibility?.reasons ?? [];
+  const cautionMemorySignals = (latestStructuredResult?.memory?.matchedSignals ?? []).filter(
+    (signal) => signal.direction === "caution"
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={{ paddingTop: topPadding, flex: 1 }}>
@@ -390,17 +400,80 @@ export default function HomeScreen() {
         behavior="padding"
         keyboardVerticalOffset={0}
       >
-        <FlatList
-          ref={listRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          style={styles.messageList}
-          contentContainerStyle={[styles.messageListContent, { paddingBottom: 12 }]}
-          keyboardDismissMode="interactive"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        />
+        {activeAnalysisTab === "Risk" ? (
+          <View style={styles.riskTabContainer}>
+            {latestStructuredResult ? (
+              <>
+                {riskItems.length > 0 ? (
+                  <View style={styles.riskSection}>
+                    <Text style={styles.riskSectionTitle}>Risk Notları</Text>
+                    <View style={styles.riskChipWrap}>
+                      {riskItems.map((risk, index) => (
+                        <View key={`risk-tab-chip-${index}`} style={styles.riskChipItem}>
+                          <Text style={styles.riskChipText}>{risk}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {compatibilityReasons.length > 0 ? (
+                  <View style={styles.riskSection}>
+                    <Text style={styles.riskSectionTitle}>Uyumluluk Uyarıları</Text>
+                    {compatibilityReasons.map((reason, index) => (
+                      <View key={`compat-reason-${index}`} style={styles.riskListItem}>
+                        <Text style={styles.riskListText}>{reason}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {cautionMemorySignals.length > 0 ? (
+                  <View style={styles.riskSection}>
+                    <Text style={styles.riskSectionTitle}>Kişisel Hafıza Uyarıları</Text>
+                    {cautionMemorySignals.map((signal, index) => (
+                      <View
+                        key={`memory-caution-${signal.ingredient}-${index}`}
+                        style={styles.riskListItem}
+                      >
+                        <Text style={styles.riskListText}>⚠ {signal.ingredient}</Text>
+                        <Text style={styles.riskListSubText}>{signal.message}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {riskItems.length === 0 && compatibilityReasons.length === 0 && cautionMemorySignals.length === 0 ? (
+                  <View style={styles.riskEmptyState}>
+                    <Text style={styles.riskEmptyTitle}>Risk verisi bulunamadı</Text>
+                    <Text style={styles.riskEmptyText}>
+                      Bu analiz için henüz risk veya uyarı bilgisi oluşmadı.
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <View style={styles.riskEmptyState}>
+                <Text style={styles.riskEmptyTitle}>Henüz risk analizi yok</Text>
+                <Text style={styles.riskEmptyText}>
+                  Risk sekmesini doldurmak için bir mesaj veya fotoğraf gönderin.
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            style={styles.messageList}
+            contentContainerStyle={[styles.messageListContent, { paddingBottom: 12 }]}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
         {snapshots.length > 0 ? (
           <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
@@ -625,7 +698,72 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     gap: 8,
   },
-
+  riskTabContainer: {
+    flex: 1,
+    gap: 10,
+    paddingTop: 6,
+  },
+  riskSection: {
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+    gap: 8,
+  },
+  riskSectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+  },
+  riskChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  riskChipItem: {
+    borderRadius: 999,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  riskChipText: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+  },
+  riskListItem: {
+    borderRadius: 10,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 3,
+  },
+  riskListText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.textPrimary,
+  },
+  riskListSubText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.textSecondary,
+  },
+  riskEmptyState: {
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    padding: 14,
+    gap: 6,
+  },
+  riskEmptyTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  riskEmptyText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.textSecondary,
+  },
 
 
   cameraContainer: {
