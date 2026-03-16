@@ -62,7 +62,7 @@ export function Composer({
         onRequestClose={closeMenu}
       >
         <Pressable style={styles.menuBackdrop} onPress={closeMenu}>
-          <Pressable style={[styles.menuContainer, { bottom: bottomPadding + 56 }]} onPress={() => {}}>
+          <Pressable style={[styles.menuContainer, { bottom: bottomPadding + 76 }]} onPress={() => {}}>
             <TouchableOpacity
               style={[styles.menuItem, styles.menuItemActive]}
               activeOpacity={0.8}
@@ -172,24 +172,24 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 2,
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    minWidth: 148,
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minWidth: 170,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 14,
   },
   menuItem: {
-    minHeight: 40,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    minHeight: 46,
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   menuItemActive: {
     backgroundColor: "#2B81FF",
