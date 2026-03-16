@@ -28,6 +28,10 @@ export function Composer({
 
   return (
     <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
+      <TouchableOpacity style={styles.plusButton} activeOpacity={1} disabled testID="plus-btn">
+        <Ionicons name="add" size={20} color={Colors.textPrimary} />
+      </TouchableOpacity>
+
       <View style={styles.inputContainer}>
         <TouchableOpacity
           style={styles.cameraInlineBtn}
@@ -83,8 +87,21 @@ export function Composer({
 
 const styles = StyleSheet.create({
   inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingTop: 8,
     paddingHorizontal: 2,
+  },
+  plusButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
   },
   inputContainer: {
     flex: 1,
