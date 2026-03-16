@@ -1,4 +1,8 @@
-import type { AnalysisSessionState, AnalyzedProduct } from "@/lib/session/analysis-session-types";
+import type {
+  AnalysisSessionState,
+  AnalyzedProduct,
+  ComparisonResult,
+} from "@/lib/session/analysis-session-types";
 
 export function createInitialAnalysisSessionState(): AnalysisSessionState {
   return {
@@ -26,6 +30,16 @@ export function setActiveProductId(
   return {
     ...state,
     activeProductId: productId,
+  };
+}
+
+export function setComparison(
+  state: AnalysisSessionState,
+  comparison: ComparisonResult | null
+): AnalysisSessionState {
+  return {
+    ...state,
+    comparison,
   };
 }
 

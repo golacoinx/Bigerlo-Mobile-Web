@@ -37,6 +37,7 @@ import { orchestrateInitialAnalysis, type UserInputPayload } from "@/lib/agents/
 import {
   appendAnalyzedProductAsActive,
   createInitialAnalysisSessionState,
+  setComparison,
 } from "@/lib/session/analysis-session-store";
 import { getApiUrl } from "@/lib/query-client";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
@@ -275,11 +276,13 @@ export default function HomeScreen() {
       const orchestration = orchestrateInitialAnalysis({
         userInput: userInputPayload,
         response,
+        existingAnalyzedProducts: analysisSessionState.analyzedProducts,
       });
 
-      setAnalysisSessionState((prev) =>
-        appendAnalyzedProductAsActive(prev, orchestration.analyzedProduct)
-      );
+      setAnalysisSessionState((prev) => {
+        const withActiveProduct = appendAnalyzedProductAsActive(prev, orchestration.analyzedProduct);
+        return setComparison(withActiveProduct, orchestration.comparison);
+      });
 
       await streamAssistantText(
         loadingId,
@@ -299,7 +302,7 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [chatMode, inputText, isSending, snapshots, streamAssistantText]);
+  }, [analysisSessionState.analyzedProducts, chatMode, inputText, isSending, snapshots, streamAssistantText]);
 
   const handleCameraReady = useCallback(async () => {
     try {
@@ -384,6 +387,23 @@ export default function HomeScreen() {
         activeRisk.personalCautions.length > 0)
   );
 
+  const activeComparison = analysisSessionState.comparison;
+  const leftComparisonProduct = activeComparison
+    ? analysisSessionState.analyzedProducts.find(
+        (product) => product.id === activeComparison.leftProductId
+      )
+    : undefined;
+  const rightComparisonProduct = activeComparison
+    ? analysisSessionState.analyzedProducts.find(
+        (product) => product.id === activeComparison.rightProductId
+      )
+    : undefined;
+
+  const leftComparisonName =
+    leftComparisonProduct?.productDetection?.productName?.trim() || "Ürün 1";
+  const rightComparisonName =
+    rightComparisonProduct?.productDetection?.productName?.trim() || "Ürün 2";
+
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={{ paddingTop: topPadding, flex: 1 }}>
@@ -457,6 +477,26 @@ export default function HomeScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />
+        ) : activeAnalysisTab === "Karşılaştırma" ? (
+          activeComparison ? (
+            <View style={styles.comparisonTabContainer}>
+              <Text style={styles.comparisonTitle}>{leftComparisonName} ↔ {rightComparisonName}</Text>
+              <Text style={styles.comparisonLine}>
+                Güvenlik: {activeComparison.winnerByCategory.safety ?? "tie"}
+              </Text>
+              <Text style={styles.comparisonLine}>
+                Uygunluk: {activeComparison.winnerByCategory.suitability ?? "tie"}
+              </Text>
+              <Text style={styles.comparisonLine}>
+                Değer: {activeComparison.winnerByCategory.value ?? "tie"}
+              </Text>
+              <Text style={styles.comparisonSummary}>{activeComparison.summary}</Text>
+            </View>
+          ) : (
+            <View style={styles.placeholderTabContainer}>
+              <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
+            </View>
+          )
         ) : activeAnalysisTab === "Risk" ? (
           hasRiskContent && activeRisk ? (
             <View style={styles.riskTabContainer}>
@@ -710,6 +750,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: Colors.textPrimary,
+  },
+  comparisonTabContainer: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  comparisonTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  comparisonLine: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.textPrimary,
+  },
+  comparisonSummary: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.textSecondary,
   },
   riskTabContainer: {
     flex: 1,

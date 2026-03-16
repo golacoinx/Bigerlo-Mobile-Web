@@ -3,9 +3,13 @@ import {
   buildAssistantAnalysisMessage,
   extractAnalysisResult,
 } from "@/lib/agents/analysis-agent";
+import { buildComparisonResult } from "@/lib/agents/comparison-agent";
 import { buildRiskResultFromAnalyzeResponse } from "@/lib/agents/risk-agent";
 import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
-import type { AnalyzedProduct } from "@/lib/session/analysis-session-types";
+import type {
+  AnalyzedProduct,
+  ComparisonResult,
+} from "@/lib/session/analysis-session-types";
 
 export type UserInputPayload = {
   id: string;
@@ -17,6 +21,7 @@ export type UserInputPayload = {
 
 export type OrchestratorAnalyzeResult = {
   analyzedProduct: AnalyzedProduct;
+  comparison: ComparisonResult | null;
   assistantMessageText: string;
   rawResponse: unknown;
 };
@@ -24,8 +29,9 @@ export type OrchestratorAnalyzeResult = {
 export function orchestrateInitialAnalysis(args: {
   userInput: UserInputPayload;
   response: AnalyzeApiResponse;
+  existingAnalyzedProducts: AnalyzedProduct[];
 }): OrchestratorAnalyzeResult {
-  const { userInput, response } = args;
+  const { userInput, response, existingAnalyzedProducts } = args;
 
   const analysisResult = extractAnalysisResult({
     responseText: response.text,
@@ -47,6 +53,11 @@ export function orchestrateInitialAnalysis(args: {
     riskOverride: riskResult,
   });
 
+  const comparison = buildComparisonResult([
+    ...existingAnalyzedProducts,
+    analyzedProduct,
+  ]);
+
   const assistantMessageText = buildAssistantAnalysisMessage({
     response,
     analysisResult,
@@ -54,6 +65,7 @@ export function orchestrateInitialAnalysis(args: {
 
   return {
     analyzedProduct,
+    comparison,
     assistantMessageText,
     rawResponse: response,
   };
