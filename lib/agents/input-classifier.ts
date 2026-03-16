@@ -1,4 +1,4 @@
-export type InputIntent = "general-chat" | "product-analysis" | "unclear";
+export type InputIntent = "general-chat" | "general-knowledge" | "product-analysis" | "unclear";
 
 export type InputClassifierPayload = {
   type: "text" | "image" | "text+image";
@@ -21,29 +21,61 @@ const GENERAL_PHRASES = new Set([
   "iyi akşamlar",
 ]);
 
-const PRODUCT_KEYWORDS = [
-  "ürün",
-  "içerik",
-  "ingredient",
-  "sivilce",
-  "akne",
-  "cilt",
-  "uygun",
-  "zararlı",
-  "risk",
-  "kıyas",
-  "karşılaştır",
+const PRODUCT_ENTITY_KEYWORDS = [
+  "bu ürün",
+  "bu krem",
+  "bu serum",
+  "bu temizleyici",
+  "bu güneş kremi",
+  "ürün adı",
+  "içerik listesi",
+  "inci",
+  "ingredients",
   "marka",
-  "fiyat",
+  "model",
   "spf",
-  "serum",
+  "ml",
+  "gram",
   "krem",
+  "serum",
   "cleanser",
   "moisturizer",
+  "sunscreen",
+];
+
+const ANALYSIS_ACTION_KEYWORDS = [
+  "analiz",
+  "değerlendir",
+  "incele",
+  "karşılaştır",
+  "kıyasla",
+  "uygun mu",
+  "sivilce yapar mı",
+  "komedojenik",
+  "risk",
+];
+
+const GENERAL_KNOWLEDGE_KEYWORDS = [
+  "egzema",
+  "akne hakkında",
+  "hassas cilt",
+  "hangi içerikler",
+  "hangi maddeler",
+  "bilgisi ver",
+  "bilgi ver",
+  "nedir",
+  "neden olur",
+  "nasıl geçer",
+  "nasıl azaltılır",
+  "artırır",
 ];
 
 function normalizeText(text?: string): string {
   return text?.trim().toLowerCase() ?? "";
+}
+
+function hasAnyKeyword(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => text.includes(keyword));
 }
 
 export function isGeneralConversation(text?: string): boolean {
@@ -54,7 +86,10 @@ export function isGeneralConversation(text?: string): boolean {
     return true;
   }
 
-  return normalized.split(" ").length <= 3 && GENERAL_PHRASES.has(normalized.replace(/[!?.,]/g, ""));
+  return (
+    normalized.split(" ").length <= 3 &&
+    GENERAL_PHRASES.has(normalized.replace(/[!?.,]/g, ""))
+  );
 }
 
 export function hasUsableProductSignal(input: InputClassifierPayload): boolean {
@@ -65,7 +100,20 @@ export function hasUsableProductSignal(input: InputClassifierPayload): boolean {
   const normalized = normalizeText(input.text);
   if (!normalized) return false;
 
-  return PRODUCT_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  const hasEntitySignal = hasAnyKeyword(normalized, PRODUCT_ENTITY_KEYWORDS);
+  const hasAnalysisAction = hasAnyKeyword(normalized, ANALYSIS_ACTION_KEYWORDS);
+
+  return hasEntitySignal || (hasAnalysisAction && normalized.includes("bu "));
+}
+
+export function isGeneralKnowledge(text?: string): boolean {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+
+  const hasKnowledgeKeyword = hasAnyKeyword(normalized, GENERAL_KNOWLEDGE_KEYWORDS);
+  const hasProductSignal = hasAnyKeyword(normalized, PRODUCT_ENTITY_KEYWORDS);
+
+  return hasKnowledgeKeyword && !hasProductSignal;
 }
 
 export function isLikelyProductAnalysisRequest(input: InputClassifierPayload): boolean {
@@ -87,6 +135,10 @@ export function classifyUserInput(input: InputClassifierPayload): InputIntent {
 
   if (isGeneralConversation(input.text)) {
     return "general-chat";
+  }
+
+  if (isGeneralKnowledge(input.text)) {
+    return "general-knowledge";
   }
 
   return "unclear";

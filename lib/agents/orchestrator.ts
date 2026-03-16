@@ -61,7 +61,7 @@ export function orchestrateInitialAnalysis(args: {
   const mode = classifyUserInput(userInput);
   const safeResponseText = sanitizeAssistantText(response.text, userInput.text);
 
-  if (mode === "general-chat") {
+  if (mode === "general-chat" || mode === "general-knowledge") {
     return {
       mode,
       comparison: null,
