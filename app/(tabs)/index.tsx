@@ -37,6 +37,12 @@ import {
 } from "@/lib/chat/send-helpers";
 import { getApiUrl } from "@/lib/query-client";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
+import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
+import {
+  addAnalyzedProduct,
+  createInitialAnalysisSessionState,
+  setActiveProductId,
+} from "@/lib/session/analysis-session-store";
 
 const SCAN_BOX_SIZE = 280;
 
@@ -72,6 +78,9 @@ export default function HomeScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [, setAnalysisSessionState] = useState(
+    createInitialAnalysisSessionState,
+  );
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
@@ -251,6 +260,17 @@ export default function HomeScreen() {
     try {
       const response = await analyzeWithGemini(payloadMessage, images);
       await streamAssistantText(loadingId, response.text, response.structured);
+
+      const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
+        sourceInputId: userMsg.id,
+        text: response.text,
+        structured: response.structured,
+      });
+
+      setAnalysisSessionState((prev) => {
+        const withProduct = addAnalyzedProduct(prev, analyzedProduct);
+        return setActiveProductId(withProduct, analyzedProduct.id);
+      });
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";
@@ -279,6 +299,7 @@ export default function HomeScreen() {
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
+    setAnalysisSessionState(createInitialAnalysisSessionState());
     setInputText("");
     setChatMode(false);
     setSnapshots([]);
