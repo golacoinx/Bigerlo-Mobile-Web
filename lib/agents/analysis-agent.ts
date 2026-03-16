@@ -1,4 +1,5 @@
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
+import { sanitizeAssistantText } from "@/lib/agents/response-sanitizer";
 import type { AnalysisResult } from "@/lib/session/analysis-session-types";
 
 const DEFAULT_SUMMARY = "Analiz sonucu alındı.";
@@ -12,7 +13,7 @@ export function extractAnalysisResult(args: {
 
   const summary =
     structured?.analysis.summary?.trim() ||
-    responseText?.trim() ||
+    sanitizeAssistantText(responseText, fallbackText) ||
     fallbackText?.trim() ||
     DEFAULT_SUMMARY;
 
@@ -44,5 +45,5 @@ export function buildAssistantAnalysisMessage(args: {
 }): string {
   const { response, analysisResult } = args;
 
-  return response.text?.trim() || analysisResult.summary || DEFAULT_SUMMARY;
+  return sanitizeAssistantText(response.text, analysisResult.summary || DEFAULT_SUMMARY);
 }

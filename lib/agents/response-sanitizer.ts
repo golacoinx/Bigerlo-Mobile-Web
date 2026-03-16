@@ -1,0 +1,52 @@
+const DEFAULT_FALLBACK = "Yardımcı olmam için ürün adı, içerik veya fotoğraf paylaşabilirsiniz.";
+
+function looksLikeJson(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  );
+}
+
+function extractMessageFromJson(text: string): string | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+
+    if (typeof parsed === "string") {
+      return parsed.trim() || null;
+    }
+
+    if (parsed && typeof parsed === "object") {
+      const candidates = ["response", "message", "text", "reply", "content"];
+      for (const key of candidates) {
+        const value = (parsed as Record<string, unknown>)[key];
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeAssistantText(rawText?: string, fallbackText?: string): string {
+  const text = rawText?.trim();
+
+  if (!text) {
+    return fallbackText?.trim() || DEFAULT_FALLBACK;
+  }
+
+  if (looksLikeJson(text)) {
+    const extracted = extractMessageFromJson(text);
+    if (extracted) {
+      return extracted;
+    }
+
+    return fallbackText?.trim() || DEFAULT_FALLBACK;
+  }
+
+  return text;
+}

@@ -279,15 +279,21 @@ export default function HomeScreen() {
         existingAnalyzedProducts: analysisSessionState.analyzedProducts,
       });
 
-      setAnalysisSessionState((prev) => {
-        const withActiveProduct = appendAnalyzedProductAsActive(prev, orchestration.analyzedProduct);
-        return setComparison(withActiveProduct, orchestration.comparison);
-      });
+      if (orchestration.mode === "product-analysis") {
+        const analyzedProduct = orchestration.analyzedProduct;
+
+        if (analyzedProduct) {
+          setAnalysisSessionState((prev) => {
+            const withActiveProduct = appendAnalyzedProductAsActive(prev, analyzedProduct);
+            return setComparison(withActiveProduct, orchestration.comparison);
+          });
+        }
+      }
 
       await streamAssistantText(
         loadingId,
         orchestration.assistantMessageText,
-        response.structured
+        orchestration.shouldAttachStructuredResult ? response.structured : undefined
       );
     } catch (err) {
       const errMsg =
