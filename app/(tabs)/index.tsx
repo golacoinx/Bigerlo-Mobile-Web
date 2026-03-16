@@ -339,6 +339,35 @@ export default function HomeScreen() {
     (signal) => signal.direction === "caution"
   );
 
+  const analyzedEntries = messages
+    .filter((message) => Boolean(message.structuredResult))
+    .map((message) => message.structuredResult)
+    .filter((result): result is NonNullable<typeof result> => Boolean(result));
+
+  const latestDistinctAnalyzedEntries = analyzedEntries.reduceRight<NonNullable<typeof latestStructuredResult>[]>(
+    (acc, result) => {
+      const comparisonKey =
+        result.productId ??
+        `${result.product.name.toLowerCase()}|${result.product.brand.toLowerCase()}|${result.product.type}`;
+
+      if (acc.some((entry) => {
+        const entryKey =
+          entry.productId ??
+          `${entry.product.name.toLowerCase()}|${entry.product.brand.toLowerCase()}|${entry.product.type}`;
+        return entryKey === comparisonKey;
+      })) {
+        return acc;
+      }
+
+      acc.push(result);
+      return acc;
+    },
+    []
+  ).slice(0, 2);
+
+  const comparisonReady = latestDistinctAnalyzedEntries.length >= 2;
+  const [comparisonA, comparisonB] = latestDistinctAnalyzedEntries;
+
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={{ paddingTop: topPadding, flex: 1 }}>
@@ -400,7 +429,74 @@ export default function HomeScreen() {
         behavior="padding"
         keyboardVerticalOffset={0}
       >
-        {activeAnalysisTab === "Risk" ? (
+        {activeAnalysisTab === "Karşılaştırma" ? (
+          <View style={styles.riskTabContainer}>
+            {comparisonReady && comparisonA && comparisonB ? (
+              <>
+                <View style={styles.compareSection}>
+                  <Text style={styles.riskSectionTitle}>Ürün Karşılaştırması</Text>
+                  <View style={styles.compareRow}>
+                    <View style={styles.compareCard}>
+                      <Text style={styles.compareTitle}>{comparisonA.product.name || "Ürün 1"}</Text>
+                      <Text style={styles.compareSubtitle}>{comparisonA.product.brand || "Marka bilinmiyor"}</Text>
+                    </View>
+                    <View style={styles.compareCard}>
+                      <Text style={styles.compareTitle}>{comparisonB.product.name || "Ürün 2"}</Text>
+                      <Text style={styles.compareSubtitle}>{comparisonB.product.brand || "Marka bilinmiyor"}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.compareSection}>
+                  <Text style={styles.riskSectionTitle}>Risk Karşılaştırması</Text>
+                  <View style={styles.compareRow}>
+                    <View style={styles.compareCard}>
+                      <View style={styles.riskChipWrap}>
+                        {(comparisonA.analysis.risks.length ? comparisonA.analysis.risks : ["Belirgin risk yok"]).slice(0, 4).map((risk, index) => (
+                          <View key={`cmp-a-risk-${index}`} style={styles.riskChipItem}>
+                            <Text style={styles.riskChipText}>{risk}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.compareCard}>
+                      <View style={styles.riskChipWrap}>
+                        {(comparisonB.analysis.risks.length ? comparisonB.analysis.risks : ["Belirgin risk yok"]).slice(0, 4).map((risk, index) => (
+                          <View key={`cmp-b-risk-${index}`} style={styles.riskChipItem}>
+                            <Text style={styles.riskChipText}>{risk}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.compareSection}>
+                  <Text style={styles.riskSectionTitle}>Uyumluluk Özeti</Text>
+                  <View style={styles.compareRow}>
+                    <View style={styles.compareCard}>
+                      <Text style={styles.riskListText}>{comparisonA.compatibility?.status ?? "unknown"}</Text>
+                      <Text style={styles.riskListSubText} numberOfLines={3}>
+                        {comparisonA.compatibility?.reasons?.[0] ?? "Uyumluluk notu bulunamadı."}
+                      </Text>
+                    </View>
+                    <View style={styles.compareCard}>
+                      <Text style={styles.riskListText}>{comparisonB.compatibility?.status ?? "unknown"}</Text>
+                      <Text style={styles.riskListSubText} numberOfLines={3}>
+                        {comparisonB.compatibility?.reasons?.[0] ?? "Uyumluluk notu bulunamadı."}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.riskEmptyState}>
+                <Text style={styles.riskEmptyTitle}>Karşılaştırma için en az 2 ürün analizi gerekiyor.</Text>
+                <Text style={styles.riskEmptyText}>Karşılaştırma başlatmak için ikinci bir ürün ekleyin.</Text>
+              </View>
+            )}
+          </View>
+        ) : activeAnalysisTab === "Risk" ? (
           <View style={styles.riskTabContainer}>
             {latestStructuredResult ? (
               <>
@@ -746,6 +842,35 @@ const styles = StyleSheet.create({
   riskListSubText: {
     fontSize: 12,
     lineHeight: 16,
+    color: Colors.textSecondary,
+  },
+  compareSection: {
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+    gap: 8,
+  },
+  compareRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  compareCard: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: Colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  compareTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  compareSubtitle: {
+    fontSize: 12,
     color: Colors.textSecondary,
   },
   riskEmptyState: {
