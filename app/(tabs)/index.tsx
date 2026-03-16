@@ -33,6 +33,12 @@ import {
   createUserMessage,
   getComposedMessageParts,
 } from "@/lib/chat/send-helpers";
+import {
+  addAnalyzedProduct,
+  createInitialAnalysisSessionState,
+  setActiveProductId,
+} from "@/lib/session/analysis-session-store";
+import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
 import { getApiUrl } from "@/lib/query-client";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
 
@@ -76,6 +82,9 @@ export default function HomeScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [analysisSessionState, setAnalysisSessionState] = useState(
+    createInitialAnalysisSessionState()
+  );
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
@@ -85,6 +94,8 @@ export default function HomeScreen() {
   const typingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
+
+  void analysisSessionState;
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -238,6 +249,7 @@ export default function HomeScreen() {
     if (!chatMode) setChatMode(true);
 
     const userMsg = createUserMessage(`${Date.now()}-user`, trimmedText, snapshots);
+    const sourceInputId = userMsg.id;
 
     setMessages((prev) => [...prev, userMsg]);
 
@@ -253,6 +265,18 @@ export default function HomeScreen() {
 
     try {
       const response = await analyzeWithGemini(payloadMessage, images);
+
+      const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
+        response,
+        sourceInputId,
+        fallbackText: payloadMessage,
+      });
+
+      setAnalysisSessionState((prev) => {
+        const withProduct = addAnalyzedProduct(prev, analyzedProduct);
+        return setActiveProductId(withProduct, analyzedProduct.id);
+      });
+
       await streamAssistantText(loadingId, response.text, response.structured);
     } catch (err) {
       const errMsg =
@@ -286,6 +310,7 @@ export default function HomeScreen() {
     setChatMode(false);
     setSnapshots([]);
     setCameraOpen(false);
+    setAnalysisSessionState(createInitialAnalysisSessionState());
   }, []);
 
   const handleTrackProduct = useCallback(async (structured: StructuredAnalysis) => {
