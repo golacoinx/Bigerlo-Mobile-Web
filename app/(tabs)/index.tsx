@@ -12,7 +12,6 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -29,7 +28,6 @@ import { MessageItem, type ChatMessage } from "@/components/chat/MessageItem";
 import { SnapshotStrip } from "@/components/chat/SnapshotStrip";
 import { Composer } from "@/components/chat/Composer";
 import { CameraBottomPanel } from "@/components/chat/CameraBottomPanel";
-import { ProfileMenu } from "@/components/menu/ProfileMenu";
 import {
   createLoadingMessage,
   createUserMessage,
@@ -72,11 +70,9 @@ async function analyzeWithGemini(
 }
 
 export default function HomeScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [chatMode, setChatMode] = useState(false);
   const [activeAnalysisTab, setActiveAnalysisTab] = useState<AnalysisTab>("Analiz");
-  const [menuVisible, setMenuVisible] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -292,13 +288,6 @@ export default function HomeScreen() {
     setCameraOpen(false);
   }, []);
 
-  const handleNavigateFromMenu = useCallback(
-    (route: string) => {
-      router.push(route as never);
-    },
-    [router]
-  );
-
   const handleTrackProduct = useCallback(async (structured: StructuredAnalysis) => {
     try {
       const url = new URL("/api/tracking/start", getApiUrl()).toString();
@@ -358,27 +347,13 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
           <View style={styles.chatHeaderCenter} />
-          <TouchableOpacity
-            style={styles.profilePhoto}
-            activeOpacity={0.8}
-            onPress={() => setMenuVisible(true)}
-            testID="profile-menu-btn"
-          >
-            <Ionicons name="person" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
+          <View style={styles.headerRight} />
         </View>
       ) : (
         <View style={styles.homeHeader}>
           <View style={styles.headerLeft} />
           <Text style={styles.brandTitle}>BIGERLO</Text>
-          <TouchableOpacity
-            style={styles.profilePhoto}
-            activeOpacity={0.8}
-            onPress={() => setMenuVisible(true)}
-            testID="profile-menu-btn"
-          >
-            <Ionicons name="person" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
+          <View style={styles.headerRight} />
         </View>
       )}
 
@@ -466,11 +441,6 @@ export default function HomeScreen() {
         />
       </Modal>
 
-      <ProfileMenu
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        onNavigate={handleNavigateFromMenu}
-      />
       </View>
     </SafeAreaView>
   );
@@ -573,14 +543,6 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 12,
   },
-  profilePhoto: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.cardInner,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   brandTitle: {
     flex: 1,
     fontSize: 24,
@@ -590,6 +552,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   headerLeft: {
+    width: 40,
+  },
+  headerRight: {
     width: 40,
   },
 
