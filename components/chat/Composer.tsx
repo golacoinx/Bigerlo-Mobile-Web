@@ -1,5 +1,13 @@
-import React from "react";
-import { StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 
@@ -24,64 +32,93 @@ export function Composer({
   isSending,
   inputRef,
 }: ComposerProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const hasText = Boolean(inputText.trim());
 
   return (
-    <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
-      <TouchableOpacity style={styles.plusButton} activeOpacity={1} disabled testID="plus-btn">
-        <Ionicons name="add" size={20} color={Colors.textPrimary} />
-      </TouchableOpacity>
+    <>
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
+          <Pressable style={[styles.menuContainer, { bottom: bottomPadding + 56 }]} onPress={() => {}}> 
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.75}>
+              <Text style={styles.menuItemText}>Analiz</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.75}>
+              <Text style={styles.menuItemText}>Takip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.75}>
+              <Text style={styles.menuItemText}>Shop</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
         <TouchableOpacity
-          style={styles.cameraInlineBtn}
-          onPress={onCameraPress}
-          activeOpacity={0.75}
-          testID="camera-btn"
+          style={styles.plusButton}
+          activeOpacity={0.85}
+          onPress={() => setMenuOpen((prev) => !prev)}
+          testID="plus-btn"
         >
-          <Ionicons name="camera" size={18} color={Colors.tabActive} />
+          <Ionicons name="add" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
 
-        <TextInput
-          ref={inputRef}
-          style={styles.textInput}
-          value={inputText}
-          onChangeText={onChangeText}
-          placeholder="Mesajınızı yazın..."
-          placeholderTextColor={Colors.textSecondary}
-          multiline
-          maxLength={500}
-          returnKeyType="send"
-          onSubmitEditing={onSend}
-          blurOnSubmit={false}
-          testID="message-input"
-        />
-
-        {hasText ? (
+        <View style={styles.inputContainer}>
           <TouchableOpacity
-            style={[styles.rightActionBtn, isSending && styles.rightActionBtnDisabled]}
-            onPress={onSend}
-            disabled={isSending}
-            activeOpacity={0.8}
-            testID="send-btn"
-          >
-            <Ionicons
-              name="arrow-up"
-              size={18}
-              color={isSending ? Colors.textSecondary : Colors.white}
-            />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.rightActionBtn, styles.micActionBtn]}
+            style={styles.cameraInlineBtn}
+            onPress={onCameraPress}
             activeOpacity={0.75}
-            testID="mic-btn"
+            testID="camera-btn"
           >
-            <Ionicons name="mic-outline" size={18} color={Colors.textSecondary} />
+            <Ionicons name="camera" size={18} color={Colors.tabActive} />
           </TouchableOpacity>
-        )}
+
+          <TextInput
+            ref={inputRef}
+            style={styles.textInput}
+            value={inputText}
+            onChangeText={onChangeText}
+            placeholder="Mesajınızı yazın..."
+            placeholderTextColor={Colors.textSecondary}
+            multiline
+            maxLength={500}
+            returnKeyType="send"
+            onSubmitEditing={onSend}
+            blurOnSubmit={false}
+            testID="message-input"
+          />
+
+          {hasText ? (
+            <TouchableOpacity
+              style={[styles.rightActionBtn, isSending && styles.rightActionBtnDisabled]}
+              onPress={onSend}
+              disabled={isSending}
+              activeOpacity={0.8}
+              testID="send-btn"
+            >
+              <Ionicons
+                name="arrow-up"
+                size={18}
+                color={isSending ? Colors.textSecondary : Colors.white}
+              />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.rightActionBtn, styles.micActionBtn]}
+              activeOpacity={0.75}
+              testID="mic-btn"
+            >
+              <Ionicons name="mic-outline" size={18} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-    </View>
+    </>
   );
 }
 
@@ -102,6 +139,31 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
+  },
+  menuBackdrop: {
+    flex: 1,
+  },
+  menuContainer: {
+    position: "absolute",
+    left: 2,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    paddingVertical: 6,
+    minWidth: 132,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  menuItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  menuItemText: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "500",
   },
   inputContainer: {
     flex: 1,
