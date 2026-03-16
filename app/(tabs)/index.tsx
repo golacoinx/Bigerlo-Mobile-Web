@@ -81,7 +81,7 @@ export default function HomeScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [, setAnalysisSessionState] = useState(createInitialAnalysisSessionState());
+  const [analysisSessionState, setAnalysisSessionState] = useState(createInitialAnalysisSessionState());
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
@@ -92,6 +92,10 @@ export default function HomeScreen() {
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
 
+  const activeProduct = analysisSessionState.analyzedProducts.find(
+    (product) => product.id === analysisSessionState.activeProductId
+  );
+  const activeRisk = activeProduct?.risk;
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -358,6 +362,28 @@ export default function HomeScreen() {
     [handleTrackProduct]
   );
 
+  const renderRiskList = useCallback((title: string, items: string[]) => {
+    if (!items.length) return null;
+
+    return (
+      <View style={styles.riskSection}>
+        <Text style={styles.riskSectionTitle}>{title}</Text>
+        {items.map((item, idx) => (
+          <Text key={`${title}-${idx}`} style={styles.riskItem}>
+            • {item}
+          </Text>
+        ))}
+      </View>
+    );
+  }, []);
+
+  const hasRiskContent = Boolean(
+    activeRisk &&
+      (activeRisk.risks.length > 0 ||
+        activeRisk.warnings.length > 0 ||
+        activeRisk.personalCautions.length > 0)
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={{ paddingTop: topPadding, flex: 1 }}>
@@ -431,6 +457,18 @@ export default function HomeScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />
+        ) : activeAnalysisTab === "Risk" ? (
+          hasRiskContent && activeRisk ? (
+            <View style={styles.riskTabContainer}>
+              {renderRiskList("Risk Sinyalleri", activeRisk.risks)}
+              {renderRiskList("Uyarılar", activeRisk.warnings)}
+              {renderRiskList("Kişisel Dikkat Notları", activeRisk.personalCautions)}
+            </View>
+          ) : (
+            <View style={styles.placeholderTabContainer}>
+              <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
+            </View>
+          )
         ) : (
           <View style={styles.placeholderTabContainer}>
             <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
@@ -671,6 +709,28 @@ const styles = StyleSheet.create({
   placeholderTabTitle: {
     fontSize: 18,
     fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  riskTabContainer: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  riskSection: {
+    gap: 6,
+  },
+  riskSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  riskItem: {
+    fontSize: 14,
+    lineHeight: 20,
     color: Colors.textPrimary,
   },
 

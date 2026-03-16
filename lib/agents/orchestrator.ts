@@ -3,6 +3,7 @@ import {
   buildAssistantAnalysisMessage,
   extractAnalysisResult,
 } from "@/lib/agents/analysis-agent";
+import { buildRiskResultFromAnalyzeResponse } from "@/lib/agents/risk-agent";
 import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
 import type { AnalyzedProduct } from "@/lib/session/analysis-session-types";
 
@@ -32,12 +33,18 @@ export function orchestrateInitialAnalysis(args: {
     structured: response.structured,
   });
 
+  const riskResult = buildRiskResultFromAnalyzeResponse({
+    response,
+    analysisResult,
+  });
+
   const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
     response,
     sourceInputId: userInput.id,
     fallbackText: userInput.text,
     createdAt: userInput.createdAt,
     analysisOverride: analysisResult,
+    riskOverride: riskResult,
   });
 
   const assistantMessageText = buildAssistantAnalysisMessage({

@@ -5,6 +5,7 @@ import type {
   AnalyzedProduct,
   IngredientExtractionResult,
   ProductDetectionResult,
+  RiskResult,
 } from "@/lib/session/analysis-session-types";
 
 type MapAnalyzeResponseArgs = {
@@ -14,6 +15,7 @@ type MapAnalyzeResponseArgs = {
   createdAt?: string;
   id?: string;
   analysisOverride?: AnalysisResult;
+  riskOverride?: RiskResult;
 };
 
 function normalizeIngredient(value: string): string {
@@ -70,6 +72,7 @@ export function mapAnalyzeResponseToAnalyzedProduct({
   createdAt,
   id,
   analysisOverride,
+  riskOverride,
 }: MapAnalyzeResponseArgs): AnalyzedProduct {
   const structured = response.structured;
   const productId =
@@ -90,11 +93,13 @@ export function mapAnalyzeResponseToAnalyzedProduct({
         fallbackText,
         structured,
       }),
-    risk: {
-      risks: structured?.analysis.risks ?? [],
-      warnings: structured?.analysis.cautionNote ? [structured.analysis.cautionNote] : [],
-      personalCautions: [],
-    },
+    risk:
+      riskOverride ??
+      {
+        risks: structured?.analysis.risks ?? [],
+        warnings: structured?.analysis.cautionNote ? [structured.analysis.cautionNote] : [],
+        personalCautions: [],
+      },
     createdAt: resolvedCreatedAt,
   };
 }
