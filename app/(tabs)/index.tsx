@@ -33,12 +33,11 @@ import {
   createUserMessage,
   getComposedMessageParts,
 } from "@/lib/chat/send-helpers";
+import { orchestrateInitialAnalysis, type UserInputPayload } from "@/lib/agents/orchestrator";
 import {
-  addAnalyzedProduct,
+  appendAnalyzedProductAsActive,
   createInitialAnalysisSessionState,
-  setActiveProductId,
 } from "@/lib/session/analysis-session-store";
-import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
 import { getApiUrl } from "@/lib/query-client";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
 
@@ -82,9 +81,7 @@ export default function HomeScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [analysisSessionState, setAnalysisSessionState] = useState(
-    createInitialAnalysisSessionState()
-  );
+  const [, setAnalysisSessionState] = useState(createInitialAnalysisSessionState());
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
@@ -95,7 +92,6 @@ export default function HomeScreen() {
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
 
-  void analysisSessionState;
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -249,7 +245,14 @@ export default function HomeScreen() {
     if (!chatMode) setChatMode(true);
 
     const userMsg = createUserMessage(`${Date.now()}-user`, trimmedText, snapshots);
-    const sourceInputId = userMsg.id;
+
+    const userInputPayload: UserInputPayload = {
+      id: userMsg.id,
+      type: hasText && hasImages ? "text+image" : hasImages ? "image" : "text",
+      text: hasText ? payloadMessage : undefined,
+      imageUri: snapshots[0]?.uri,
+      createdAt: new Date().toISOString(),
+    };
 
     setMessages((prev) => [...prev, userMsg]);
 
@@ -265,19 +268,20 @@ export default function HomeScreen() {
 
     try {
       const response = await analyzeWithGemini(payloadMessage, images);
-
-      const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
+      const orchestration = orchestrateInitialAnalysis({
+        userInput: userInputPayload,
         response,
-        sourceInputId,
-        fallbackText: payloadMessage,
       });
 
-      setAnalysisSessionState((prev) => {
-        const withProduct = addAnalyzedProduct(prev, analyzedProduct);
-        return setActiveProductId(withProduct, analyzedProduct.id);
-      });
+      setAnalysisSessionState((prev) =>
+        appendAnalyzedProductAsActive(prev, orchestration.analyzedProduct)
+      );
 
-      await streamAssistantText(loadingId, response.text, response.structured);
+      await streamAssistantText(
+        loadingId,
+        orchestration.assistantMessageText,
+        response.structured
+      );
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";

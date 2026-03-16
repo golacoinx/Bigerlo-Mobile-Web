@@ -1,3 +1,4 @@
+import { extractAnalysisResult } from "@/lib/agents/analysis-agent";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
 import type {
   AnalysisResult,
@@ -12,9 +13,8 @@ type MapAnalyzeResponseArgs = {
   fallbackText?: string;
   createdAt?: string;
   id?: string;
+  analysisOverride?: AnalysisResult;
 };
-
-const DEFAULT_SUMMARY = "Analiz sonucu alındı.";
 
 function normalizeIngredient(value: string): string {
   return value.trim().toLowerCase();
@@ -63,40 +63,13 @@ function extractIngredientResult(
   };
 }
 
-function extractAnalysisResult(
-  responseText: string | undefined,
-  structured?: StructuredAnalysis
-): AnalysisResult {
-  const summary = structured?.analysis.summary?.trim() || responseText?.trim() || DEFAULT_SUMMARY;
-
-  const positives: string[] = [];
-  const cautions: string[] = [];
-
-  if (structured?.analysis.suitability === "good") {
-    positives.push("Uygunluk değerlendirmesi olumlu.");
-  }
-
-  if (structured?.analysis.cautionNote) {
-    cautions.push(structured.analysis.cautionNote);
-  }
-
-  if (structured?.analysis.risks?.length) {
-    cautions.push(...structured.analysis.risks);
-  }
-
-  return {
-    summary,
-    positives,
-    cautions,
-  };
-}
-
 export function mapAnalyzeResponseToAnalyzedProduct({
   response,
   sourceInputId,
   fallbackText,
   createdAt,
   id,
+  analysisOverride,
 }: MapAnalyzeResponseArgs): AnalyzedProduct {
   const structured = response.structured;
   const productId =
@@ -110,7 +83,13 @@ export function mapAnalyzeResponseToAnalyzedProduct({
     sourceInputId,
     productDetection: extractProductDetection(structured),
     ingredientExtraction: extractIngredientResult(structured),
-    analysis: extractAnalysisResult(response.text ?? fallbackText, structured),
+    analysis:
+      analysisOverride ??
+      extractAnalysisResult({
+        responseText: response.text,
+        fallbackText,
+        structured,
+      }),
     risk: {
       risks: structured?.analysis.risks ?? [],
       warnings: structured?.analysis.cautionNote ? [structured.analysis.cautionNote] : [],

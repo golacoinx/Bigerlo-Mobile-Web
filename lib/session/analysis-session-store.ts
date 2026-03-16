@@ -28,3 +28,14 @@ export function setActiveProductId(
     activeProductId: productId,
   };
 }
+
+export function appendAnalyzedProductAsActive(
+  state: AnalysisSessionState,
+  product: AnalyzedProduct
+): AnalysisSessionState {
+  return {
+    ...state,
+    analyzedProducts: [...state.analyzedProducts, product],
+    activeProductId: product.id,
+  };
+}
