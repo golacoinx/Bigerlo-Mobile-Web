@@ -329,45 +329,6 @@ export default function HomeScreen() {
     [handleTrackProduct]
   );
 
-  const latestStructuredResult = [...messages]
-    .reverse()
-    .find((message) => Boolean(message.structuredResult))?.structuredResult;
-
-  const riskItems = latestStructuredResult?.analysis.risks ?? [];
-  const compatibilityReasons = latestStructuredResult?.compatibility?.reasons ?? [];
-  const cautionMemorySignals = (latestStructuredResult?.memory?.matchedSignals ?? []).filter(
-    (signal) => signal.direction === "caution"
-  );
-
-  const analyzedEntries = messages
-    .filter((message) => Boolean(message.structuredResult))
-    .map((message) => message.structuredResult)
-    .filter((result): result is NonNullable<typeof result> => Boolean(result));
-
-  const latestDistinctAnalyzedEntries = analyzedEntries.reduceRight<NonNullable<typeof latestStructuredResult>[]>(
-    (acc, result) => {
-      const comparisonKey =
-        result.productId ??
-        `${result.product.name.toLowerCase()}|${result.product.brand.toLowerCase()}|${result.product.type}`;
-
-      if (acc.some((entry) => {
-        const entryKey =
-          entry.productId ??
-          `${entry.product.name.toLowerCase()}|${entry.product.brand.toLowerCase()}|${entry.product.type}`;
-        return entryKey === comparisonKey;
-      })) {
-        return acc;
-      }
-
-      acc.push(result);
-      return acc;
-    },
-    []
-  ).slice(0, 2);
-
-  const comparisonReady = latestDistinctAnalyzedEntries.length >= 2;
-  const [comparisonA, comparisonB] = latestDistinctAnalyzedEntries;
-
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <View style={{ paddingTop: topPadding, flex: 1 }}>
@@ -429,135 +390,7 @@ export default function HomeScreen() {
         behavior="padding"
         keyboardVerticalOffset={0}
       >
-        {activeAnalysisTab === "Karşılaştırma" ? (
-          <View style={styles.riskTabContainer}>
-            {comparisonReady && comparisonA && comparisonB ? (
-              <>
-                <View style={styles.compareSection}>
-                  <Text style={styles.riskSectionTitle}>Ürün Karşılaştırması</Text>
-                  <View style={styles.compareRow}>
-                    <View style={styles.compareCard}>
-                      <Text style={styles.compareTitle}>{comparisonA.product.name || "Ürün 1"}</Text>
-                      <Text style={styles.compareSubtitle}>{comparisonA.product.brand || "Marka bilinmiyor"}</Text>
-                    </View>
-                    <View style={styles.compareCard}>
-                      <Text style={styles.compareTitle}>{comparisonB.product.name || "Ürün 2"}</Text>
-                      <Text style={styles.compareSubtitle}>{comparisonB.product.brand || "Marka bilinmiyor"}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.compareSection}>
-                  <Text style={styles.riskSectionTitle}>Risk Karşılaştırması</Text>
-                  <View style={styles.compareRow}>
-                    <View style={styles.compareCard}>
-                      <View style={styles.riskChipWrap}>
-                        {(comparisonA.analysis.risks.length ? comparisonA.analysis.risks : ["Belirgin risk yok"]).slice(0, 4).map((risk, index) => (
-                          <View key={`cmp-a-risk-${index}`} style={styles.riskChipItem}>
-                            <Text style={styles.riskChipText}>{risk}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                    <View style={styles.compareCard}>
-                      <View style={styles.riskChipWrap}>
-                        {(comparisonB.analysis.risks.length ? comparisonB.analysis.risks : ["Belirgin risk yok"]).slice(0, 4).map((risk, index) => (
-                          <View key={`cmp-b-risk-${index}`} style={styles.riskChipItem}>
-                            <Text style={styles.riskChipText}>{risk}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.compareSection}>
-                  <Text style={styles.riskSectionTitle}>Uyumluluk Özeti</Text>
-                  <View style={styles.compareRow}>
-                    <View style={styles.compareCard}>
-                      <Text style={styles.riskListText}>{comparisonA.compatibility?.status ?? "unknown"}</Text>
-                      <Text style={styles.riskListSubText} numberOfLines={3}>
-                        {comparisonA.compatibility?.reasons?.[0] ?? "Uyumluluk notu bulunamadı."}
-                      </Text>
-                    </View>
-                    <View style={styles.compareCard}>
-                      <Text style={styles.riskListText}>{comparisonB.compatibility?.status ?? "unknown"}</Text>
-                      <Text style={styles.riskListSubText} numberOfLines={3}>
-                        {comparisonB.compatibility?.reasons?.[0] ?? "Uyumluluk notu bulunamadı."}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <View style={styles.riskEmptyState}>
-                <Text style={styles.riskEmptyTitle}>Karşılaştırma için en az 2 ürün analizi gerekiyor.</Text>
-                <Text style={styles.riskEmptyText}>Karşılaştırma başlatmak için ikinci bir ürün ekleyin.</Text>
-              </View>
-            )}
-          </View>
-        ) : activeAnalysisTab === "Risk" ? (
-          <View style={styles.riskTabContainer}>
-            {latestStructuredResult ? (
-              <>
-                {riskItems.length > 0 ? (
-                  <View style={styles.riskSection}>
-                    <Text style={styles.riskSectionTitle}>Risk Notları</Text>
-                    <View style={styles.riskChipWrap}>
-                      {riskItems.map((risk, index) => (
-                        <View key={`risk-tab-chip-${index}`} style={styles.riskChipItem}>
-                          <Text style={styles.riskChipText}>{risk}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
-
-                {compatibilityReasons.length > 0 ? (
-                  <View style={styles.riskSection}>
-                    <Text style={styles.riskSectionTitle}>Uyumluluk Uyarıları</Text>
-                    {compatibilityReasons.map((reason, index) => (
-                      <View key={`compat-reason-${index}`} style={styles.riskListItem}>
-                        <Text style={styles.riskListText}>{reason}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
-                {cautionMemorySignals.length > 0 ? (
-                  <View style={styles.riskSection}>
-                    <Text style={styles.riskSectionTitle}>Kişisel Hafıza Uyarıları</Text>
-                    {cautionMemorySignals.map((signal, index) => (
-                      <View
-                        key={`memory-caution-${signal.ingredient}-${index}`}
-                        style={styles.riskListItem}
-                      >
-                        <Text style={styles.riskListText}>⚠ {signal.ingredient}</Text>
-                        <Text style={styles.riskListSubText}>{signal.message}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
-                {riskItems.length === 0 && compatibilityReasons.length === 0 && cautionMemorySignals.length === 0 ? (
-                  <View style={styles.riskEmptyState}>
-                    <Text style={styles.riskEmptyTitle}>Risk verisi bulunamadı</Text>
-                    <Text style={styles.riskEmptyText}>
-                      Bu analiz için henüz risk veya uyarı bilgisi oluşmadı.
-                    </Text>
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <View style={styles.riskEmptyState}>
-                <Text style={styles.riskEmptyTitle}>Henüz risk analizi yok</Text>
-                <Text style={styles.riskEmptyText}>
-                  Risk sekmesini doldurmak için bir mesaj veya fotoğraf gönderin.
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
+        {activeAnalysisTab === "Analiz" ? (
           <FlatList
             ref={listRef}
             data={messages}
@@ -569,6 +402,10 @@ export default function HomeScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />
+        ) : (
+          <View style={styles.placeholderTabContainer}>
+            <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
+          </View>
         )}
 
         {snapshots.length > 0 ? (
@@ -794,100 +631,18 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     gap: 8,
   },
-  riskTabContainer: {
+  placeholderTabContainer: {
     flex: 1,
-    gap: 10,
-    paddingTop: 6,
-  },
-  riskSection: {
-    borderRadius: 14,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 12,
-    gap: 8,
-  },
-  riskSectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-  },
-  riskChipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  riskChipItem: {
-    borderRadius: 999,
-    backgroundColor: Colors.card,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  riskChipText: {
-    fontSize: 12,
-    color: Colors.textPrimary,
-  },
-  riskListItem: {
-    borderRadius: 10,
-    backgroundColor: Colors.card,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 3,
-  },
-  riskListText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: Colors.textPrimary,
-  },
-  riskListSubText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Colors.textSecondary,
-  },
-  compareSection: {
-    borderRadius: 14,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 12,
-    gap: 8,
-  },
-  compareRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  compareCard: {
-    flex: 1,
-    borderRadius: 10,
-    backgroundColor: Colors.card,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  compareTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-  },
-  compareSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  riskEmptyState: {
     borderRadius: 14,
     backgroundColor: Colors.card,
-    padding: 14,
-    gap: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
   },
-  riskEmptyTitle: {
-    fontSize: 14,
+  placeholderTabTitle: {
+    fontSize: 18,
     fontWeight: "700",
     color: Colors.textPrimary,
-  },
-  riskEmptyText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: Colors.textSecondary,
   },
 
 
