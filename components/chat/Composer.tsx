@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import Colors from "@/constants/colors";
 
 type ComposerProps = {
@@ -32,8 +33,25 @@ export function Composer({
   isSending,
   inputRef,
 }: ComposerProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const hasText = Boolean(inputText.trim());
+
+  const closeMenu = () => setMenuOpen(false);
+
+  const handleSelectAnaliz = () => {
+    closeMenu();
+  };
+
+  const handleSelectTakip = () => {
+    closeMenu();
+    router.push("/takip");
+  };
+
+  const handleSelectShop = () => {
+    closeMenu();
+    router.push("/shop");
+  };
 
   return (
     <>
@@ -41,19 +59,23 @@ export function Composer({
         visible={menuOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setMenuOpen(false)}
+        onRequestClose={closeMenu}
       >
-        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
+        <Pressable style={styles.menuBackdrop} onPress={closeMenu}>
           <Pressable style={[styles.menuContainer, { bottom: bottomPadding + 56 }]} onPress={() => {}}>
-            <TouchableOpacity style={[styles.menuItem, styles.menuItemActive]} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={[styles.menuItem, styles.menuItemActive]}
+              activeOpacity={0.8}
+              onPress={handleSelectAnaliz}
+            >
               <Ionicons name="sparkles-outline" size={16} color={Colors.white} />
               <Text style={[styles.menuItemText, styles.menuItemTextActive]}>Analiz</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.8} onPress={handleSelectTakip}>
               <Ionicons name="trending-up-outline" size={16} color={Colors.textSecondary} />
               <Text style={styles.menuItemText}>Takip</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.8} onPress={handleSelectShop}>
               <Ionicons name="bag-outline" size={16} color={Colors.textSecondary} />
               <Text style={styles.menuItemText}>Shop</Text>
             </TouchableOpacity>
