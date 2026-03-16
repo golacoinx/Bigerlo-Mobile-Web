@@ -44,21 +44,24 @@ export function Composer({
         onRequestClose={() => setMenuOpen(false)}
       >
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)}>
-          <Pressable style={[styles.menuContainer, { bottom: bottomPadding + 56 }]} onPress={() => {}}> 
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.75}>
-              <Text style={styles.menuItemText}>Analiz</Text>
+          <Pressable style={[styles.menuContainer, { bottom: bottomPadding + 56 }]} onPress={() => {}}>
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemActive]} activeOpacity={0.8}>
+              <Ionicons name="sparkles-outline" size={16} color={Colors.white} />
+              <Text style={[styles.menuItemText, styles.menuItemTextActive]}>Analiz</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.75}>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.8}>
+              <Ionicons name="trending-up-outline" size={16} color={Colors.textSecondary} />
               <Text style={styles.menuItemText}>Takip</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.75}>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.8}>
+              <Ionicons name="bag-outline" size={16} color={Colors.textSecondary} />
               <Text style={styles.menuItemText}>Shop</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
 
-      <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}>
+      <View style={[styles.inputRow, { paddingBottom: bottomPadding }]}> 
         <TouchableOpacity
           style={styles.plusButton}
           activeOpacity={0.85}
@@ -146,24 +149,36 @@ const styles = StyleSheet.create({
   menuContainer: {
     position: "absolute",
     left: 2,
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.white,
     borderRadius: 16,
-    paddingVertical: 6,
-    minWidth: 132,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    minWidth: 148,
     shadowColor: "#000",
     shadowOpacity: 0.12,
-    shadowRadius: 12,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    elevation: 10,
   },
   menuItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    minHeight: 40,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  menuItemActive: {
+    backgroundColor: "#2B81FF",
   },
   menuItemText: {
     color: Colors.textPrimary,
     fontSize: 15,
     fontWeight: "500",
+  },
+  menuItemTextActive: {
+    color: Colors.white,
   },
   inputContainer: {
     flex: 1,
