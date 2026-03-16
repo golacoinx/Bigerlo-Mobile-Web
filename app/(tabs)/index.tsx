@@ -40,6 +40,15 @@ import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis
 
 const SCAN_BOX_SIZE = 280;
 
+type AnalysisTab = "Analiz" | "Karşılaştırma" | "Risk" | "Fiyat";
+
+const ANALYSIS_TABS: { key: AnalysisTab; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "Analiz", icon: "sparkles-outline" },
+  { key: "Karşılaştırma", icon: "git-compare-outline" },
+  { key: "Risk", icon: "shield-checkmark-outline" },
+  { key: "Fiyat", icon: "pricetag-outline" },
+];
+
 async function analyzeWithGemini(
   message: string,
   images: AnalyzeImage[]
@@ -66,6 +75,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [chatMode, setChatMode] = useState(false);
+  const [activeAnalysisTab, setActiveAnalysisTab] = useState<AnalysisTab>("Analiz");
   const [menuVisible, setMenuVisible] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -372,6 +382,34 @@ export default function HomeScreen() {
         </View>
       )}
 
+
+      {messages.length > 0 ? (
+        <View style={styles.analysisTabsContainer}>
+          <View style={styles.analysisTabsRow}>
+            {ANALYSIS_TABS.map((tab) => {
+              const isActive = activeAnalysisTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.analysisTab, isActive && styles.analysisTabActive]}
+                  activeOpacity={0.8}
+                  onPress={() => setActiveAnalysisTab(tab.key)}
+                >
+                  <Ionicons
+                    name={tab.icon}
+                    size={16}
+                    color={isActive ? Colors.white : Colors.textSecondary}
+                  />
+                  <Text style={[styles.analysisTabLabel, isActive && styles.analysisTabLabelActive]}>
+                    {tab.key}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
       <KeyboardAvoidingView
         style={styles.body}
         behavior="padding"
@@ -572,6 +610,43 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
+  },
+  analysisTabsContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  analysisTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  analysisTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  analysisTabActive: {
+    backgroundColor: "#2B81FF",
+  },
+  analysisTabLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+  },
+  analysisTabLabelActive: {
+    color: Colors.white,
   },
   body: {
     flex: 1,
