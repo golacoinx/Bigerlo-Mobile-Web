@@ -25,6 +25,8 @@ export function MessageItem({
   const hasMultiplePhotos = photoUris.length > 1;
   const showMedia = hasSinglePhoto || hasMultiplePhotos;
 
+  const safeText = typeof item.text === "string" ? item.text : String(item.text ?? "");
+
   const hasUsefulStructuredData = Boolean(
     item.structuredResult &&
       (
@@ -81,7 +83,7 @@ export function MessageItem({
         />
       ) : null}
 
-      {item.text ? (
+      {safeText ? (
         <Text
           style={[
             styles.messageText,
@@ -89,7 +91,7 @@ export function MessageItem({
             item.isLoading && styles.loadingText,
           ]}
         >
-          {item.text}
+          {safeText}
         </Text>
       ) : showMedia ? null : (
         <Text style={[styles.messageText, styles.userBubbleText]} />

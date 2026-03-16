@@ -32,8 +32,8 @@ function extractMessageFromJson(text: string): string | null {
   }
 }
 
-export function sanitizeAssistantText(rawText?: string, fallbackText?: string): string {
-  const text = rawText?.trim();
+export function sanitizeAssistantText(rawText?: unknown, fallbackText?: string): string {
+  const text = typeof rawText === "string" ? rawText.trim() : "";
 
   if (!text) {
     return fallbackText?.trim() || DEFAULT_FALLBACK;

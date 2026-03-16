@@ -33,7 +33,7 @@ export type OrchestratorAnalyzeResult = {
   comparison: ComparisonResult | null;
   assistantMessageText: string;
   shouldAttachStructuredResult: boolean;
-  rawResponse: unknown;
+  rawResponse: AnalyzeApiResponse;
 };
 
 function hasMeaningfulAnalyzedProduct(product: AnalyzedProduct): boolean {

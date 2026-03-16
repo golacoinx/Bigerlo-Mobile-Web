@@ -293,7 +293,9 @@ export default function HomeScreen() {
       await streamAssistantText(
         loadingId,
         orchestration.assistantMessageText,
-        orchestration.shouldAttachStructuredResult ? response.structured : undefined
+        orchestration.mode === "product-analysis" && orchestration.shouldAttachStructuredResult
+          ? orchestration.rawResponse?.structured
+          : undefined
       );
     } catch (err) {
       const errMsg =
