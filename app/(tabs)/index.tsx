@@ -37,9 +37,12 @@ import {
 } from "@/lib/chat/send-helpers";
 import { getApiUrl } from "@/lib/query-client";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
-import { orchestrateInitialAnalysis, type UserInputPayload } from "@/lib/agents/orchestrator";
 import {
-  appendAnalyzedProductAsActive,
+  orchestrateInitialAnalysis,
+  orchestrateSessionUpdateAfterAnalysis,
+  type UserInputPayload,
+} from "@/lib/agents/orchestrator";
+import {
   createInitialAnalysisSessionState,
   getActiveAnalyzedProduct,
 } from "@/lib/session/analysis-session-store";
@@ -114,6 +117,7 @@ export default function HomeScreen() {
 
   const activeProduct = getActiveAnalyzedProduct(analysisSessionState);
   const activeRisk = activeProduct?.risk;
+  const activeComparison = analysisSessionState.comparison;
 
   const streamAssistantText = useCallback(
     (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis) =>
@@ -282,7 +286,10 @@ export default function HomeScreen() {
       );
 
       setAnalysisSessionState((prev) =>
-        appendAnalyzedProductAsActive(prev, orchestrated.analyzedProduct),
+        orchestrateSessionUpdateAfterAnalysis({
+          state: prev,
+          analyzedProduct: orchestrated.analyzedProduct,
+        }).nextState,
       );
     } catch (err) {
       const errMsg =
@@ -438,6 +445,30 @@ export default function HomeScreen() {
           )}
         </View>
 
+        <View style={styles.comparisonCard}>
+          <Text style={styles.comparisonTitle}>Karşılaştırma</Text>
+          {!activeComparison ? (
+            <Text style={styles.comparisonEmptyText}>Karşılaştırma için en az iki analizli ürün gerekli.</Text>
+          ) : (
+            <View style={styles.comparisonContent}>
+              <Text style={styles.comparisonPairLabel}>
+                {getProductDisplayNameById(analysisSessionState, activeComparison.leftProductId, "Ürün 1")} vs {" "}
+                {getProductDisplayNameById(analysisSessionState, activeComparison.rightProductId, "Ürün 2")}
+              </Text>
+              <ComparisonWinnerRow
+                label="Safety"
+                winner={activeComparison.winnerByCategory.safety}
+              />
+              <ComparisonWinnerRow
+                label="Suitability"
+                winner={activeComparison.winnerByCategory.suitability}
+              />
+              <ComparisonWinnerRow label="Value" winner={activeComparison.winnerByCategory.value} />
+              <Text style={styles.comparisonSummary}>{activeComparison.summary}</Text>
+            </View>
+          )}
+        </View>
+
         {snapshots.length > 0 ? (
           <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
         ) : null}
@@ -499,6 +530,31 @@ function RiskListSection({ title, values }: { title: string; values: string[] })
       ) : (
         <Text style={styles.riskEmptyText}>Veri bulunamadı.</Text>
       )}
+    </View>
+  );
+}
+
+function getProductDisplayNameById(
+  state: { analyzedProducts: { id: string; productDetection?: { productName?: string } }[] },
+  productId: string,
+  fallback: string,
+): string {
+  const product = state.analyzedProducts.find((item) => item.id === productId);
+  const name = product?.productDetection?.productName?.trim();
+  return name && name.length > 0 ? name : fallback;
+}
+
+function ComparisonWinnerRow({
+  label,
+  winner,
+}: {
+  label: string;
+  winner?: "left" | "right" | "tie";
+}) {
+  return (
+    <View style={styles.comparisonRow}>
+      <Text style={styles.comparisonRowLabel}>{label}</Text>
+      <Text style={styles.comparisonRowValue}>{winner ?? "tie"}</Text>
     </View>
   );
 }
@@ -682,6 +738,54 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   riskEmptyText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  comparisonCard: {
+    marginTop: 2,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    padding: 10,
+    gap: 8,
+  },
+  comparisonTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  comparisonEmptyText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  comparisonContent: {
+    gap: 6,
+  },
+  comparisonPairLabel: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+    fontWeight: "700",
+  },
+  comparisonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  comparisonRowLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  comparisonRowValue: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  comparisonSummary: {
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 16,

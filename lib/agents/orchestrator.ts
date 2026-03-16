@@ -1,8 +1,10 @@
 import type { AnalyzeApiResponse } from "@/lib/chat/analysis-types";
 import { buildAssistantAnalysisMessage, extractAnalysisResult } from "@/lib/agents/analysis-agent";
+import { buildComparisonResult, selectComparisonCandidates } from "@/lib/agents/comparison-agent";
 import { buildRiskResultFromAnalyzeResponse } from "@/lib/agents/risk-agent";
 import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
-import type { AnalyzedProduct } from "@/lib/session/analysis-session-types";
+import { appendAnalyzedProductAndResolveComparison } from "@/lib/session/analysis-session-store";
+import type { AnalysisSessionState, AnalyzedProduct, ComparisonResult } from "@/lib/session/analysis-session-types";
 
 export type UserInputPayload = {
   id: string;
@@ -16,6 +18,11 @@ export type OrchestratorAnalyzeResult = {
   analyzedProduct: AnalyzedProduct;
   assistantMessageText: string;
   rawResponse: unknown;
+};
+
+export type OrchestratorSessionUpdateResult = {
+  nextState: AnalysisSessionState;
+  comparison: ComparisonResult | null;
 };
 
 type OrchestrateInitialAnalysisArgs = {
@@ -54,5 +61,28 @@ export function orchestrateInitialAnalysis(
     analyzedProduct,
     assistantMessageText,
     rawResponse: analyzeResponse,
+  };
+}
+
+export function orchestrateSessionUpdateAfterAnalysis(args: {
+  state: AnalysisSessionState;
+  analyzedProduct: AnalyzedProduct;
+}): OrchestratorSessionUpdateResult {
+  const candidates = selectComparisonCandidates([
+    ...args.state.analyzedProducts,
+    args.analyzedProduct,
+  ]);
+
+  const comparison = candidates
+    ? buildComparisonResult({ left: candidates.left, right: candidates.right })
+    : null;
+
+  return {
+    nextState: appendAnalyzedProductAndResolveComparison(
+      args.state,
+      args.analyzedProduct,
+      comparison,
+    ),
+    comparison,
   };
 }

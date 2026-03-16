@@ -1,4 +1,8 @@
-import type { AnalysisSessionState, AnalyzedProduct } from "@/lib/session/analysis-session-types";
+import type {
+  AnalysisSessionState,
+  AnalyzedProduct,
+  ComparisonResult,
+} from "@/lib/session/analysis-session-types";
 
 export function createInitialAnalysisSessionState(): AnalysisSessionState {
   return {
@@ -29,12 +33,31 @@ export function setActiveProductId(
   };
 }
 
+export function setComparison(
+  state: AnalysisSessionState,
+  comparison: ComparisonResult | null,
+): AnalysisSessionState {
+  return {
+    ...state,
+    comparison,
+  };
+}
+
 export function appendAnalyzedProductAsActive(
   state: AnalysisSessionState,
   analyzedProduct: AnalyzedProduct,
 ): AnalysisSessionState {
   const withProduct = addAnalyzedProduct(state, analyzedProduct);
   return setActiveProductId(withProduct, analyzedProduct.id);
+}
+
+export function appendAnalyzedProductAndResolveComparison(
+  state: AnalysisSessionState,
+  analyzedProduct: AnalyzedProduct,
+  comparison: ComparisonResult | null,
+): AnalysisSessionState {
+  const withActive = appendAnalyzedProductAsActive(state, analyzedProduct);
+  return setComparison(withActive, comparison);
 }
 
 export function getActiveAnalyzedProduct(state: AnalysisSessionState): AnalyzedProduct | undefined {
