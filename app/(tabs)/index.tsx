@@ -41,6 +41,7 @@ import { orchestrateInitialAnalysis, type UserInputPayload } from "@/lib/agents/
 import {
   appendAnalyzedProductAsActive,
   createInitialAnalysisSessionState,
+  getActiveAnalyzedProduct,
 } from "@/lib/session/analysis-session-store";
 
 const SCAN_BOX_SIZE = 280;
@@ -77,7 +78,7 @@ export default function HomeScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [, setAnalysisSessionState] = useState(
+  const [analysisSessionState, setAnalysisSessionState] = useState(
     createInitialAnalysisSessionState,
   );
   const [inputText, setInputText] = useState("");
@@ -110,6 +111,9 @@ export default function HomeScreen() {
       }
     };
   }, []);
+
+  const activeProduct = getActiveAnalyzedProduct(analysisSessionState);
+  const activeRisk = activeProduct?.risk;
 
   const streamAssistantText = useCallback(
     (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis) =>
@@ -421,6 +425,19 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         />
 
+        <View style={styles.riskTabCard}>
+          <Text style={styles.riskTabTitle}>Risk</Text>
+          {!activeRisk ? (
+            <Text style={styles.riskEmptyText}>Henüz risk verisi yok.</Text>
+          ) : (
+            <View style={styles.riskSectionsWrap}>
+              <RiskListSection title="Risks" values={activeRisk.risks} />
+              <RiskListSection title="Warnings" values={activeRisk.warnings} />
+              <RiskListSection title="Personal Cautions" values={activeRisk.personalCautions} />
+            </View>
+          )}
+        </View>
+
         {snapshots.length > 0 ? (
           <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
         ) : null}
@@ -465,6 +482,23 @@ export default function HomeScreen() {
         onClose={() => setMenuVisible(false)}
         onNavigate={handleNavigateFromMenu}
       />
+    </View>
+  );
+}
+
+function RiskListSection({ title, values }: { title: string; values: string[] }) {
+  return (
+    <View style={styles.riskSection}>
+      <Text style={styles.riskSectionTitle}>{title}</Text>
+      {values.length > 0 ? (
+        values.slice(0, 4).map((item, index) => (
+          <Text key={`${title}-${index}`} style={styles.riskSectionItem}>
+            • {item}
+          </Text>
+        ))
+      ) : (
+        <Text style={styles.riskEmptyText}>Veri bulunamadı.</Text>
+      )}
     </View>
   );
 }
@@ -616,8 +650,42 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     gap: 8,
   },
-
-
+  riskTabCard: {
+    marginTop: 6,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    padding: 10,
+    gap: 6,
+  },
+  riskTabTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  riskSectionsWrap: {
+    gap: 8,
+  },
+  riskSection: {
+    gap: 4,
+  },
+  riskSectionTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+  },
+  riskSectionItem: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+    lineHeight: 16,
+  },
+  riskEmptyText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
 
   cameraContainer: {
     flex: 1,

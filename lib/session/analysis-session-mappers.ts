@@ -10,6 +10,7 @@ type MapAnalyzeResponseToAnalyzedProductArgs = {
   text?: string;
   structured?: StructuredAnalysis;
   analysis?: AnalysisResult;
+  risk?: RiskResult;
 };
 
 function normalizeIngredient(value: string): string {
@@ -23,7 +24,7 @@ function dedupe(values: Array<string | undefined | null>): string[] {
 export function mapAnalyzeResponseToAnalyzedProduct(
   args: MapAnalyzeResponseToAnalyzedProductArgs,
 ): AnalyzedProduct {
-  const { sourceInputId, text, structured, analysis } = args;
+  const { sourceInputId, text, structured, analysis, risk } = args;
   const now = new Date().toISOString();
 
   const ingredients = dedupe(structured?.ingredients ?? []);
@@ -45,7 +46,7 @@ export function mapAnalyzeResponseToAnalyzedProduct(
     ...cautionFromMemory,
   ]);
 
-  const risk: RiskResult | undefined = structured
+  const derivedRisk: RiskResult | undefined = structured
     ? {
         risks: structured.analysis.risks ?? [],
         warnings: structured.analysis.cautionNote ? [structured.analysis.cautionNote] : [],
@@ -83,7 +84,7 @@ export function mapAnalyzeResponseToAnalyzedProduct(
           cautions,
           suggestedFor: undefined,
         },
-    risk,
+    risk: risk ?? derivedRisk,
     createdAt: now,
   };
 }

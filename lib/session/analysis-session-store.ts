@@ -36,3 +36,8 @@ export function appendAnalyzedProductAsActive(
   const withProduct = addAnalyzedProduct(state, analyzedProduct);
   return setActiveProductId(withProduct, analyzedProduct.id);
 }
+
+export function getActiveAnalyzedProduct(state: AnalysisSessionState): AnalyzedProduct | undefined {
+  if (!state.activeProductId) return undefined;
+  return state.analyzedProducts.find((product) => product.id === state.activeProductId);
+}

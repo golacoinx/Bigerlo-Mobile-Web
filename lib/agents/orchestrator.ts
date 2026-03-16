@@ -1,5 +1,6 @@
 import type { AnalyzeApiResponse } from "@/lib/chat/analysis-types";
 import { buildAssistantAnalysisMessage, extractAnalysisResult } from "@/lib/agents/analysis-agent";
+import { buildRiskResultFromAnalyzeResponse } from "@/lib/agents/risk-agent";
 import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
 import type { AnalyzedProduct } from "@/lib/session/analysis-session-types";
 
@@ -31,14 +32,22 @@ export function orchestrateInitialAnalysis(
     structured: analyzeResponse.structured,
   });
 
+  const analysis = extractAnalysisResult({
+    text: analyzeResponse.text,
+    structured: analyzeResponse.structured,
+  });
+
+  const risk = buildRiskResultFromAnalyzeResponse({
+    text: analyzeResponse.text,
+    structured: analyzeResponse.structured,
+  });
+
   const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
     sourceInputId: userInput.id,
     text: assistantMessageText,
     structured: analyzeResponse.structured,
-    analysis: extractAnalysisResult({
-      text: analyzeResponse.text,
-      structured: analyzeResponse.structured,
-    }),
+    analysis,
+    risk,
   });
 
   return {
