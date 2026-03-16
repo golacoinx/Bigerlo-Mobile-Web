@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import {
@@ -331,7 +331,8 @@ export default function HomeScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: topPadding }]}> 
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
+      <View style={{ paddingTop: topPadding, flex: 1 }}>
       {chatMode ? (
         <View style={styles.chatHeader}>
           <TouchableOpacity
@@ -432,7 +433,8 @@ export default function HomeScreen() {
         onClose={() => setMenuVisible(false)}
         onNavigate={handleNavigateFromMenu}
       />
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
