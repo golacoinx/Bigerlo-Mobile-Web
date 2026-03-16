@@ -37,11 +37,10 @@ import {
 } from "@/lib/chat/send-helpers";
 import { getApiUrl } from "@/lib/query-client";
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
-import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
+import { orchestrateInitialAnalysis, type UserInputPayload } from "@/lib/agents/orchestrator";
 import {
-  addAnalyzedProduct,
+  appendAnalyzedProductAsActive,
   createInitialAnalysisSessionState,
-  setActiveProductId,
 } from "@/lib/session/analysis-session-store";
 
 const SCAN_BOX_SIZE = 280;
@@ -259,18 +258,28 @@ export default function HomeScreen() {
 
     try {
       const response = await analyzeWithGemini(payloadMessage, images);
-      await streamAssistantText(loadingId, response.text, response.structured);
+      const userInputPayload: UserInputPayload = {
+        id: userMsg.id,
+        type: hasText && hasImages ? "text+image" : hasImages ? "image" : "text",
+        text: trimmedText || undefined,
+        imageUri: snapshots[0]?.uri,
+        createdAt: new Date().toISOString(),
+      };
 
-      const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
-        sourceInputId: userMsg.id,
-        text: response.text,
-        structured: response.structured,
+      const orchestrated = orchestrateInitialAnalysis({
+        userInput: userInputPayload,
+        analyzeResponse: response,
       });
 
-      setAnalysisSessionState((prev) => {
-        const withProduct = addAnalyzedProduct(prev, analyzedProduct);
-        return setActiveProductId(withProduct, analyzedProduct.id);
-      });
+      await streamAssistantText(
+        loadingId,
+        orchestrated.assistantMessageText,
+        response.structured,
+      );
+
+      setAnalysisSessionState((prev) =>
+        appendAnalyzedProductAsActive(prev, orchestrated.analyzedProduct),
+      );
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";

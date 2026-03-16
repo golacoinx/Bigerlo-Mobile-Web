@@ -28,3 +28,11 @@ export function setActiveProductId(
     activeProductId,
   };
 }
+
+export function appendAnalyzedProductAsActive(
+  state: AnalysisSessionState,
+  analyzedProduct: AnalyzedProduct,
+): AnalysisSessionState {
+  const withProduct = addAnalyzedProduct(state, analyzedProduct);
+  return setActiveProductId(withProduct, analyzedProduct.id);
+}

@@ -1,10 +1,15 @@
 import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
-import type { AnalyzedProduct, RiskResult } from "@/lib/session/analysis-session-types";
+import type {
+  AnalyzedProduct,
+  AnalysisResult,
+  RiskResult,
+} from "@/lib/session/analysis-session-types";
 
 type MapAnalyzeResponseToAnalyzedProductArgs = {
   sourceInputId: string;
   text?: string;
   structured?: StructuredAnalysis;
+  analysis?: AnalysisResult;
 };
 
 function normalizeIngredient(value: string): string {
@@ -18,7 +23,7 @@ function dedupe(values: Array<string | undefined | null>): string[] {
 export function mapAnalyzeResponseToAnalyzedProduct(
   args: MapAnalyzeResponseToAnalyzedProductArgs,
 ): AnalyzedProduct {
-  const { sourceInputId, text, structured } = args;
+  const { sourceInputId, text, structured, analysis } = args;
   const now = new Date().toISOString();
 
   const ingredients = dedupe(structured?.ingredients ?? []);
@@ -66,12 +71,18 @@ export function mapAnalyzeResponseToAnalyzedProduct(
       normalizedIngredients,
       confidence: structured?.analysis?.confidence ?? 0,
     },
-    analysis: {
-      summary: structured?.analysis?.summary?.trim() || text?.trim() || "Analiz özeti bulunamadı.",
-      positives: dedupe(positiveFromMemory),
-      cautions,
-      suggestedFor: undefined,
-    },
+    analysis: analysis
+      ? {
+          ...analysis,
+          positives: dedupe([...analysis.positives, ...positiveFromMemory]),
+          cautions: dedupe([...analysis.cautions, ...cautionFromMemory]),
+        }
+      : {
+          summary: structured?.analysis?.summary?.trim() || text?.trim() || "Analiz özeti bulunamadı.",
+          positives: dedupe(positiveFromMemory),
+          cautions,
+          suggestedFor: undefined,
+        },
     risk,
     createdAt: now,
   };
