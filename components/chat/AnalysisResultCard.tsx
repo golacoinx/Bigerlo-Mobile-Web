@@ -1,5 +1,13 @@
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import {
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Colors from "@/constants/colors";
 import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
 
@@ -33,9 +41,11 @@ function getShortVerdict(suitability: StructuredAnalysis["analysis"]["suitabilit
 
 export function AnalysisResultCard({
   structured,
+  photoUris,
   onTrackProduct,
 }: {
   structured: StructuredAnalysis;
+  photoUris?: string[];
   onTrackProduct?: (structured: StructuredAnalysis) => void;
 }) {
   const { product, ingredients, analysis } = structured;
@@ -44,8 +54,27 @@ export function AnalysisResultCard({
   const hasRealBrand = product.brand && product.brand.toLowerCase() !== "bilinmiyor";
   const hasIngredients = ingredients.length > 0;
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const thumbnailUri = useMemo(() => (photoUris && photoUris.length > 0 ? photoUris[0] : undefined), [photoUris]);
+  const remainingCount = Math.max(0, (photoUris?.length ?? 0) - 1);
+
   return (
     <View style={styles.card}>
+      {thumbnailUri ? (
+        <TouchableOpacity
+          style={styles.thumbnailWrap}
+          activeOpacity={0.85}
+          onPress={() => setPreviewOpen(true)}
+        >
+          <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} resizeMode="cover" />
+          {remainingCount > 0 ? (
+            <View style={styles.thumbnailBadge}>
+              <Text style={styles.thumbnailBadgeText}>+{remainingCount}</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      ) : null}
+
       <View style={styles.headerRow}>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.title}>{hasRealProductName ? product.name : "Ürün analizi"}</Text>
@@ -78,6 +107,16 @@ export function AnalysisResultCard({
           <Text style={styles.ctaText}>Track this product</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal visible={previewOpen} transparent animationType="fade" onRequestClose={() => setPreviewOpen(false)}>
+        <Pressable style={styles.previewBackdrop} onPress={() => setPreviewOpen(false)}>
+          <Pressable style={styles.previewContent} onPress={() => {}}>
+            {thumbnailUri ? (
+              <Image source={{ uri: thumbnailUri }} style={styles.previewImage} resizeMode="contain" />
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -90,6 +129,58 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     padding: 12,
     gap: 8,
+  },
+
+  thumbnailWrap: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    overflow: "hidden",
+    zIndex: 5,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  thumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  thumbnailBadge: {
+    position: "absolute",
+    right: 4,
+    bottom: 4,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  thumbnailBadgeText: {
+    color: Colors.white,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  previewContent: {
+    width: "90%",
+    height: "58%",
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: Colors.black,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
   },
   headerRow: {
     flexDirection: "row",

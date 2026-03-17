@@ -99,7 +99,7 @@ export default function HomeScreen() {
   }, []);
 
   const streamAssistantText = useCallback(
-    (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis) =>
+    (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis, cardPhotoUris?: string[]) =>
       new Promise<void>((resolve) => {
         if (typingTimerRef.current) {
           clearInterval(typingTimerRef.current);
@@ -117,7 +117,7 @@ export default function HomeScreen() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === loadingId
-                ? { ...m, text: partial, isLoading: index < chars.length }
+                ? { ...m, text: partial, isLoading: index < chars.length, cardPhotoUris }
                 : m
             )
           );
@@ -129,7 +129,7 @@ export default function HomeScreen() {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === loadingId
-                  ? { ...m, text: fullText, isLoading: false, structuredResult }
+                  ? { ...m, text: fullText, isLoading: false, structuredResult, cardPhotoUris }
                   : m
               )
             );
@@ -245,6 +245,7 @@ export default function HomeScreen() {
     const loadingMsg = createLoadingMessage(loadingId);
 
     setMessages((prev) => [...prev, loadingMsg]);
+    const sentCardPhotoUris = snapshots.map((snapshot) => snapshot.thumbnailUri);
     setIsSending(true);
     setInputText("");
     setSnapshots([]);
@@ -273,7 +274,8 @@ export default function HomeScreen() {
       await streamAssistantText(
         loadingId,
         orchestration.assistantMessageText,
-        orchestration.structuredResult
+        orchestration.structuredResult,
+        sentCardPhotoUris
       );
     } catch (err) {
       const errMsg =

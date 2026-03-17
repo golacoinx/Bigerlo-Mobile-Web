@@ -11,6 +11,7 @@ export type ChatMessage = {
   photoUris?: string[];
   isLoading?: boolean;
   structuredResult?: StructuredAnalysis;
+  cardPhotoUris?: string[];
 };
 
 export function MessageItem({
@@ -83,6 +84,7 @@ export function MessageItem({
       {!item.isUser && hasUsefulStructuredData && item.structuredResult ? (
         <AnalysisResultCard
           structured={item.structuredResult}
+          photoUris={item.cardPhotoUris}
           onTrackProduct={onTrackProduct}
         />
       ) : null}
