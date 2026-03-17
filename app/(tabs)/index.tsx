@@ -104,6 +104,7 @@ export default function HomeScreen() {
       structuredResult?: StructuredAnalysis,
       cardPhotoUri?: string,
       hideTextWhenStructured = false,
+      isPhotoAnalysisCard = false,
     ) =>
       new Promise<void>((resolve) => {
         if (hideTextWhenStructured && structuredResult) {
@@ -114,7 +115,14 @@ export default function HomeScreen() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === loadingId
-                ? { ...m, text: "", isLoading: false, structuredResult, cardPhotoUri }
+                ? {
+                    ...m,
+                    text: "",
+                    isLoading: false,
+                    structuredResult,
+                    cardPhotoUri,
+                    isPhotoAnalysisCard,
+                  }
                 : m
             )
           );
@@ -138,7 +146,13 @@ export default function HomeScreen() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === loadingId
-                ? { ...m, text: partial, isLoading: index < chars.length, cardPhotoUri }
+                ? {
+                    ...m,
+                    text: partial,
+                    isLoading: index < chars.length,
+                    cardPhotoUri,
+                    isPhotoAnalysisCard,
+                  }
                 : m
             )
           );
@@ -156,6 +170,7 @@ export default function HomeScreen() {
                       isLoading: false,
                       structuredResult,
                       cardPhotoUri,
+                      isPhotoAnalysisCard,
                     }
                   : m
               )
@@ -334,6 +349,7 @@ export default function HomeScreen() {
           orchestration.assistantMessageText,
           orchestration.structuredResult,
           snapshot.thumbnailUri,
+          false,
           true
         );
       }

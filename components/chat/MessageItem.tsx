@@ -11,6 +11,7 @@ export type ChatMessage = {
   isLoading?: boolean;
   structuredResult?: StructuredAnalysis;
   cardPhotoUri?: string;
+  isPhotoAnalysisCard?: boolean;
 };
 
 export function MessageItem({
@@ -27,6 +28,7 @@ export function MessageItem({
   }
 
   const hasUsefulStructuredData = Boolean(
+    item.isPhotoAnalysisCard &&
     item.structuredResult &&
       (
         item.structuredResult.analysis.summary ||
@@ -53,7 +55,7 @@ export function MessageItem({
         />
       ) : null}
 
-      {safeText && (!item.structuredResult || item.isUser || item.isLoading) ? (
+      {safeText ? (
         <Text
           style={[
             styles.messageText,
