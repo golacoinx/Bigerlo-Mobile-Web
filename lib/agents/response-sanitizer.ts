@@ -1,4 +1,4 @@
-const DEFAULT_FALLBACK = "Yardımcı olmam için ürün adı, içerik veya fotoğraf paylaşabilirsiniz.";
+const DEFAULT_FALLBACK = "Şu an net bir yanıt üretemedim. Soruyu biraz daha detaylandırabilir misiniz?";
 
 function looksLikeJson(text: string): boolean {
   const trimmed = text.trim();
@@ -32,11 +32,11 @@ function extractMessageFromJson(text: string): string | null {
   }
 }
 
-export function sanitizeAssistantText(rawText?: unknown, fallbackText?: string): string {
+export function sanitizeAssistantText(rawText?: unknown): string {
   const text = typeof rawText === "string" ? rawText.trim() : "";
 
   if (!text) {
-    return fallbackText?.trim() || DEFAULT_FALLBACK;
+    return DEFAULT_FALLBACK;
   }
 
   if (looksLikeJson(text)) {
@@ -45,7 +45,7 @@ export function sanitizeAssistantText(rawText?: unknown, fallbackText?: string):
       return extracted;
     }
 
-    return fallbackText?.trim() || DEFAULT_FALLBACK;
+    return DEFAULT_FALLBACK;
   }
 
   return text;

@@ -59,13 +59,24 @@ export function orchestrateInitialAnalysis(args: {
   const { userInput, response, existingAnalyzedProducts } = args;
 
   const mode = classifyUserInput(userInput);
-  const safeResponseText = sanitizeAssistantText(response.text, userInput.text);
+  const sanitizedResponseText = sanitizeAssistantText(response.text);
 
-  if (mode === "general-chat" || mode === "general-knowledge") {
+  if (mode === "general-chat") {
     return {
       mode,
       comparison: null,
-      assistantMessageText: safeResponseText,
+      assistantMessageText:
+        response.text?.trim() ? sanitizedResponseText : "Merhaba! Size nasıl yardımcı olabilirim?",
+      shouldAttachStructuredResult: false,
+      rawResponse: response,
+    };
+  }
+
+  if (mode === "general-knowledge") {
+    return {
+      mode,
+      comparison: null,
+      assistantMessageText: sanitizedResponseText,
       shouldAttachStructuredResult: false,
       rawResponse: response,
     };
@@ -75,8 +86,7 @@ export function orchestrateInitialAnalysis(args: {
     return {
       mode,
       comparison: null,
-      assistantMessageText:
-        "Ürün analizi yapabilmem için ürün adı, içerik listesi veya fotoğraf paylaşabilirsiniz.",
+      assistantMessageText: "Sorunuzu biraz daha netleştirebilir misiniz?",
       shouldAttachStructuredResult: false,
       rawResponse: response,
     };
@@ -84,7 +94,6 @@ export function orchestrateInitialAnalysis(args: {
 
   const analysisResult = extractAnalysisResult({
     responseText: response.text,
-    fallbackText: userInput.text,
     structured: response.structured,
   });
 
@@ -96,7 +105,6 @@ export function orchestrateInitialAnalysis(args: {
   const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
     response,
     sourceInputId: userInput.id,
-    fallbackText: userInput.text,
     createdAt: userInput.createdAt,
     analysisOverride: analysisResult,
     riskOverride: riskResult,
@@ -106,8 +114,7 @@ export function orchestrateInitialAnalysis(args: {
     return {
       mode: "unclear",
       comparison: null,
-      assistantMessageText:
-        "Bu girdiden net bir ürün analizi çıkaramadım. Ürün adı veya daha net bir fotoğraf paylaşabilirsiniz.",
+      assistantMessageText: "Sorunuzu biraz daha netleştirebilir misiniz?",
       shouldAttachStructuredResult: false,
       rawResponse: response,
     };

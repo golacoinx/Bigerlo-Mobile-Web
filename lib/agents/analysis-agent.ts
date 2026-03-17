@@ -6,15 +6,13 @@ const DEFAULT_SUMMARY = "Analiz sonucu alındı.";
 
 export function extractAnalysisResult(args: {
   responseText?: string;
-  fallbackText?: string;
   structured?: StructuredAnalysis;
 }): AnalysisResult {
-  const { responseText, fallbackText, structured } = args;
+  const { responseText, structured } = args;
 
   const summary =
     structured?.analysis.summary?.trim() ||
-    sanitizeAssistantText(responseText, fallbackText) ||
-    fallbackText?.trim() ||
+    sanitizeAssistantText(responseText) ||
     DEFAULT_SUMMARY;
 
   const positives: string[] = [];
@@ -45,5 +43,5 @@ export function buildAssistantAnalysisMessage(args: {
 }): string {
   const { response, analysisResult } = args;
 
-  return sanitizeAssistantText(response.text, analysisResult.summary || DEFAULT_SUMMARY);
+  return sanitizeAssistantText(response.text) || analysisResult.summary || DEFAULT_SUMMARY;
 }

@@ -90,7 +90,6 @@ export function mapAnalyzeResponseToAnalyzedProduct({
       analysisOverride ??
       extractAnalysisResult({
         responseText: response.text,
-        fallbackText,
         structured,
       }),
     risk:
