@@ -17,7 +17,7 @@ function extractMessageFromJson(text: string): string | null {
     }
 
     if (parsed && typeof parsed === "object") {
-      const candidates = ["response", "message", "text", "reply", "content"];
+      const candidates = ["displayText", "response", "message", "text", "reply", "content"];
       for (const key of candidates) {
         const value = (parsed as Record<string, unknown>)[key];
         if (typeof value === "string" && value.trim()) {

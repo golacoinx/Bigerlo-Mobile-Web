@@ -55,7 +55,6 @@ export function AnalysisResultCard({
         </View>
       </View>
 
-      {analysis.summary ? <Text style={styles.summary}>{analysis.summary}</Text> : null}
 
       {hasIngredients ? (
         <Text style={styles.ingredients} numberOfLines={2}>

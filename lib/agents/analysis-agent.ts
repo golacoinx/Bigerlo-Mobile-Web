@@ -80,9 +80,13 @@ export function buildAssistantAnalysisMessage(args: {
 }): string {
   const { response, analysisResult } = args;
 
+  if (typeof response.text === "string" && response.text.trim()) {
+    return sanitizeAssistantText(response.text);
+  }
+
   if (response.structured) {
     return buildNaturalAnalysisNarrative(response.structured);
   }
 
-  return sanitizeAssistantText(response.text) || analysisResult.summary || DEFAULT_SUMMARY;
+  return analysisResult.summary || DEFAULT_SUMMARY;
 }

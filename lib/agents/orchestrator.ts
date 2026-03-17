@@ -227,10 +227,14 @@ export async function orchestrateInitialAnalysis(args: {
     analyzedProduct,
   ]);
 
-  const assistantMessageText = buildAssistantAnalysisMessage({
-    response,
-    analysisResult,
-  });
+  const assistantMessageText =
+    (typeof response.text === "string" && response.text.trim()
+      ? sanitizeAssistantText(response.text)
+      : "") ||
+    buildAssistantAnalysisMessage({
+      response,
+      analysisResult,
+    });
 
   return {
     mode,

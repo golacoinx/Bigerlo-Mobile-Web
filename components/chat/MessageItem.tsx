@@ -13,6 +13,23 @@ export type ChatMessage = {
   structuredResult?: StructuredAnalysis;
 };
 
+function extractDisplayText(value: unknown): string {
+  if (typeof value === "string") return value;
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const candidates = ["displayText", "response", "message", "text", "reply", "content"];
+    for (const key of candidates) {
+      const candidate = record[key];
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate;
+      }
+    }
+  }
+
+  return String(value ?? "");
+}
+
 export function MessageItem({
   item,
   onTrackProduct,
@@ -25,7 +42,7 @@ export function MessageItem({
   const hasMultiplePhotos = photoUris.length > 1;
   const showMedia = hasSinglePhoto || hasMultiplePhotos;
 
-  const safeText = typeof item.text === "string" ? item.text : String(item.text ?? "");
+  const safeText = extractDisplayText(item.text);
 
   const hasUsefulStructuredData = Boolean(
     item.structuredResult &&
@@ -93,7 +110,7 @@ export function MessageItem({
         >
           {safeText}
         </Text>
-      ) : showMedia ? null : (
+      ) : showMedia || (!item.isUser && hasUsefulStructuredData) ? null : (
         <Text style={[styles.messageText, styles.userBubbleText]} />
       )}
     </View>
