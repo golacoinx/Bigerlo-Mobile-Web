@@ -13,23 +13,6 @@ export type ChatMessage = {
   structuredResult?: StructuredAnalysis;
 };
 
-function extractDisplayText(value: unknown): string {
-  if (typeof value === "string") return value;
-
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const candidates = ["displayText", "response", "message", "text", "reply", "content"];
-    for (const key of candidates) {
-      const candidate = record[key];
-      if (typeof candidate === "string" && candidate.trim()) {
-        return candidate;
-      }
-    }
-  }
-
-  return String(value ?? "");
-}
-
 export function MessageItem({
   item,
   onTrackProduct,
@@ -42,7 +25,11 @@ export function MessageItem({
   const hasMultiplePhotos = photoUris.length > 1;
   const showMedia = hasSinglePhoto || hasMultiplePhotos;
 
-  const safeText = extractDisplayText(item.text);
+  const safeText = typeof item.text === "string" ? item.text : String(item.text ?? "");
+
+  if (__DEV__ && typeof item.text !== "string") {
+    console.error("[MessageItem] Non-string text received", item.text);
+  }
 
   const hasUsefulStructuredData = Boolean(
     item.structuredResult &&

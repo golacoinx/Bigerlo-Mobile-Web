@@ -33,6 +33,17 @@ export type OrchestratorAnalyzeResult = {
   comparison: ComparisonResult | null;
 };
 
+
+function ensureAssistantMessageText(value: unknown, fallback: string): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+
+  return sanitizeAssistantText(fallback);
+}
+
+
 async function requestAnalyze(message: string, images: AnalyzeImage[]): Promise<AnalyzeApiResponse> {
   const url = new URL("/api/analyze", getApiUrl()).toString();
   const response = await fetch(url, {
@@ -126,7 +137,7 @@ export async function orchestrateInitialAnalysis(args: {
   if (mode === "general-chat") {
     return {
       mode,
-      assistantMessageText: "Merhaba! Size nasıl yardımcı olabilirim?",
+      assistantMessageText: ensureAssistantMessageText("Merhaba! Size nasıl yardımcı olabilirim?", "Merhaba! Size nasıl yardımcı olabilirim?"),
       structuredResult: undefined,
       comparison: null,
     };
@@ -168,7 +179,10 @@ export async function orchestrateInitialAnalysis(args: {
 
       return {
         mode: "product-analysis",
-        assistantMessageText: buildAssistantAnalysisMessage({ response, analysisResult }),
+        assistantMessageText: ensureAssistantMessageText(
+          buildAssistantAnalysisMessage({ response, analysisResult }),
+          "Şu an net bir yanıt üretemedim. Soruyu biraz daha detaylandırabilir misiniz?"
+        ),
         structuredResult: response.structured,
         analyzedProduct,
         comparison,
@@ -178,7 +192,7 @@ export async function orchestrateInitialAnalysis(args: {
     const text = await requestGeneralKnowledge(userInput.text?.trim() || payloadMessage);
     return {
       mode,
-      assistantMessageText: text,
+      assistantMessageText: ensureAssistantMessageText(text, "Şu an net bir yanıt üretemedim. Soruyu biraz daha detaylandırabilir misiniz?"),
       structuredResult: undefined,
       comparison: null,
     };
@@ -187,7 +201,7 @@ export async function orchestrateInitialAnalysis(args: {
   if (mode === "unclear") {
     return {
       mode,
-      assistantMessageText: "Sorunuzu biraz daha netleştirebilir misiniz?",
+      assistantMessageText: ensureAssistantMessageText("Sorunuzu biraz daha netleştirebilir misiniz?", "Sorunuzu biraz daha netleştirebilir misiniz?"),
       structuredResult: undefined,
       comparison: null,
     };
@@ -238,7 +252,7 @@ export async function orchestrateInitialAnalysis(args: {
 
   return {
     mode,
-    assistantMessageText,
+    assistantMessageText: ensureAssistantMessageText(assistantMessageText, "Şu an net bir yanıt üretemedim. Soruyu biraz daha detaylandırabilir misiniz?"),
     structuredResult: response.structured,
     analyzedProduct,
     comparison,
