@@ -19,13 +19,12 @@ export function getComposedMessageParts(inputText: string, snapshots: Snapshot[]
 export function createUserMessage(
   id: string,
   text: string,
-  snapshots: Snapshot[]
+  _snapshots: Snapshot[]
 ): ChatMessage {
   return {
     id,
     text,
     isUser: true,
-    photoUris: snapshots.length > 0 ? snapshots.map((snapshot) => snapshot.thumbnailUri) : undefined,
   };
 }
 

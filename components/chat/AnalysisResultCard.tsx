@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   Image,
   Modal,
@@ -41,11 +41,11 @@ function getShortVerdict(suitability: StructuredAnalysis["analysis"]["suitabilit
 
 export function AnalysisResultCard({
   structured,
-  photoUris,
+  photoUri,
   onTrackProduct,
 }: {
   structured: StructuredAnalysis;
-  photoUris?: string[];
+  photoUri?: string;
   onTrackProduct?: (structured: StructuredAnalysis) => void;
 }) {
   const { product, ingredients, analysis } = structured;
@@ -55,47 +55,43 @@ export function AnalysisResultCard({
   const hasIngredients = ingredients.length > 0;
 
   const [previewOpen, setPreviewOpen] = useState(false);
-  const thumbnailUri = useMemo(() => (photoUris && photoUris.length > 0 ? photoUris[0] : undefined), [photoUris]);
-  const remainingCount = Math.max(0, (photoUris?.length ?? 0) - 1);
 
   return (
     <View style={styles.card}>
-      {thumbnailUri ? (
-        <TouchableOpacity
-          style={styles.thumbnailWrap}
-          activeOpacity={0.85}
-          onPress={() => setPreviewOpen(true)}
-        >
-          <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} resizeMode="cover" />
-          {remainingCount > 0 ? (
-            <View style={styles.thumbnailBadge}>
-              <Text style={styles.thumbnailBadgeText}>+{remainingCount}</Text>
+      <View style={styles.topRow}>
+        <View style={styles.mainContent}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerTitleWrap}>
+              <Text style={styles.title}>{hasRealProductName ? product.name : "Ürün analizi"}</Text>
+              <Text style={styles.subtitle}>
+                {hasRealBrand ? product.brand : "Marka bilinmiyor"} · {formatProductType(product.type)}
+              </Text>
             </View>
+          </View>
+
+
+          {hasIngredients ? (
+            <Text style={styles.ingredients} numberOfLines={2}>
+              Öne çıkan içerikler: {ingredients.slice(0, 6).join(", ")}
+            </Text>
           ) : null}
-        </TouchableOpacity>
-      ) : null}
 
-      <View style={styles.headerRow}>
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.title}>{hasRealProductName ? product.name : "Ürün analizi"}</Text>
-          <Text style={styles.subtitle}>
-            {hasRealBrand ? product.brand : "Marka bilinmiyor"} · {formatProductType(product.type)}
-          </Text>
+          <Text style={styles.verdict}>{getShortVerdict(analysis.suitability)}</Text>
+
+          {(analysis.risks.length > 0 || analysis.cautionNote) ? (
+            <Text style={styles.riskHint}>Detaylı dikkat ve risk notları için Risk sekmesine bakın.</Text>
+          ) : null}
         </View>
+        {photoUri ? (
+          <TouchableOpacity
+            style={styles.thumbnailWrap}
+            activeOpacity={0.85}
+            onPress={() => setPreviewOpen(true)}
+          >
+            <Image source={{ uri: photoUri }} style={styles.thumbnail} resizeMode="cover" />
+          </TouchableOpacity>
+        ) : null}
       </View>
-
-
-      {hasIngredients ? (
-        <Text style={styles.ingredients} numberOfLines={2}>
-          Öne çıkan içerikler: {ingredients.slice(0, 6).join(", ")}
-        </Text>
-      ) : null}
-
-      <Text style={styles.verdict}>{getShortVerdict(analysis.suitability)}</Text>
-
-      {(analysis.risks.length > 0 || analysis.cautionNote) ? (
-        <Text style={styles.riskHint}>Detaylı dikkat ve risk notları için Risk sekmesine bakın.</Text>
-      ) : null}
 
       <View style={styles.footerRow}>
         <TouchableOpacity
@@ -111,8 +107,8 @@ export function AnalysisResultCard({
       <Modal visible={previewOpen} transparent animationType="fade" onRequestClose={() => setPreviewOpen(false)}>
         <Pressable style={styles.previewBackdrop} onPress={() => setPreviewOpen(false)}>
           <Pressable style={styles.previewContent} onPress={() => {}}>
-            {thumbnailUri ? (
-              <Image source={{ uri: thumbnailUri }} style={styles.previewImage} resizeMode="contain" />
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.previewImage} resizeMode="contain" />
             ) : null}
           </Pressable>
         </Pressable>
@@ -130,16 +126,21 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  mainContent: {
+    flex: 1,
+    gap: 8,
+  },
 
   thumbnailWrap: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 56,
-    height: 56,
+    width: 52,
+    height: 52,
     borderRadius: 10,
     overflow: "hidden",
-    zIndex: 5,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.card,
@@ -147,20 +148,6 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: "100%",
     height: "100%",
-  },
-  thumbnailBadge: {
-    position: "absolute",
-    right: 4,
-    bottom: 4,
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.65)",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  thumbnailBadgeText: {
-    color: Colors.white,
-    fontSize: 10,
-    fontWeight: "700",
   },
   previewBackdrop: {
     flex: 1,
@@ -184,7 +171,6 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: "row",
-    gap: 8,
     alignItems: "flex-start",
   },
   headerTitleWrap: {

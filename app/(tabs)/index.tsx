@@ -24,7 +24,6 @@ import {
 } from "@/lib/camera/snapshot-camera";
 import Colors from "@/constants/colors";
 import { MessageItem, type ChatMessage } from "@/components/chat/MessageItem";
-import { SnapshotStrip } from "@/components/chat/SnapshotStrip";
 import { Composer } from "@/components/chat/Composer";
 import { CameraBottomPanel } from "@/components/chat/CameraBottomPanel";
 import {
@@ -99,8 +98,30 @@ export default function HomeScreen() {
   }, []);
 
   const streamAssistantText = useCallback(
-    (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis, cardPhotoUris?: string[]) =>
+    (
+      loadingId: string,
+      fullText: string,
+      structuredResult?: StructuredAnalysis,
+      cardPhotoUri?: string,
+      hideTextWhenStructured = false,
+    ) =>
       new Promise<void>((resolve) => {
+        if (hideTextWhenStructured && structuredResult) {
+          if (typingTimerRef.current) {
+            clearInterval(typingTimerRef.current);
+            typingTimerRef.current = null;
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === loadingId
+                ? { ...m, text: "", isLoading: false, structuredResult, cardPhotoUri }
+                : m
+            )
+          );
+          resolve();
+          return;
+        }
+
         if (typingTimerRef.current) {
           clearInterval(typingTimerRef.current);
           typingTimerRef.current = null;
@@ -117,7 +138,7 @@ export default function HomeScreen() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === loadingId
-                ? { ...m, text: partial, isLoading: index < chars.length, cardPhotoUris }
+                ? { ...m, text: partial, isLoading: index < chars.length, cardPhotoUri }
                 : m
             )
           );
@@ -129,7 +150,13 @@ export default function HomeScreen() {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === loadingId
-                  ? { ...m, text: fullText, isLoading: false, structuredResult, cardPhotoUris }
+                  ? {
+                      ...m,
+                      text: hideTextWhenStructured && structuredResult ? "" : fullText,
+                      isLoading: false,
+                      structuredResult,
+                      cardPhotoUri,
+                    }
                   : m
               )
             );
@@ -241,52 +268,88 @@ export default function HomeScreen() {
 
     setMessages((prev) => [...prev, userMsg]);
 
-    const loadingId = `${Date.now()}-loading`;
-    const loadingMsg = createLoadingMessage(loadingId);
-
-    setMessages((prev) => [...prev, loadingMsg]);
-    const sentCardPhotoUris = snapshots.map((snapshot) => snapshot.thumbnailUri);
     setIsSending(true);
     setInputText("");
+    const snapshotsToProcess = [...snapshots];
     setSnapshots([]);
     setCameraOpen(false);
     inputRef.current?.focus();
 
     try {
-      const orchestration = await orchestrateInitialAnalysis({
-        userInput: userInputPayload,
-        payloadMessage,
-        images,
-        existingAnalyzedProducts: analysisSessionState.analyzedProducts,
-        activeAnalyzedProduct: activeProduct,
-        lastAssistantText,
-      });
+      if (!hasImages) {
+        const loadingId = `${Date.now()}-loading`;
+        setMessages((prev) => [...prev, createLoadingMessage(loadingId)]);
 
-      const analyzedProduct = orchestration.analyzedProduct;
-
-      if (analyzedProduct) {
-        setAnalysisSessionState((prev) => {
-          const withActiveProduct = appendAnalyzedProductAsActive(prev, analyzedProduct);
-          return setComparison(withActiveProduct, orchestration.comparison);
+        const orchestration = await orchestrateInitialAnalysis({
+          userInput: userInputPayload,
+          payloadMessage,
+          images: [],
+          existingAnalyzedProducts: analysisSessionState.analyzedProducts,
+          activeAnalyzedProduct: activeProduct,
+          lastAssistantText,
         });
+
+        await streamAssistantText(
+          loadingId,
+          orchestration.assistantMessageText,
+          undefined,
+          undefined,
+          false
+        );
+        return;
       }
 
-      await streamAssistantText(
-        loadingId,
-        orchestration.assistantMessageText,
-        orchestration.structuredResult,
-        sentCardPhotoUris
-      );
+      let localAnalyzedProducts = analysisSessionState.analyzedProducts;
+
+      for (let idx = 0; idx < snapshotsToProcess.length; idx += 1) {
+        const snapshot = snapshotsToProcess[idx];
+        const loadingId = `${Date.now()}-loading-${idx}`;
+        setMessages((prev) => [...prev, createLoadingMessage(loadingId)]);
+
+        const orchestration = await orchestrateInitialAnalysis({
+          userInput: {
+            ...userInputPayload,
+            id: `${userInputPayload.id}-img-${idx}`,
+            type: hasText ? "text+image" : "image",
+            imageUri: snapshot.uri,
+          },
+          payloadMessage,
+          images: [images[idx]],
+          existingAnalyzedProducts: localAnalyzedProducts,
+          activeAnalyzedProduct: activeProduct,
+          lastAssistantText,
+        });
+
+        const analyzedProduct = orchestration.analyzedProduct;
+        if (analyzedProduct) {
+          localAnalyzedProducts = [...localAnalyzedProducts, analyzedProduct];
+          setAnalysisSessionState((prev) => {
+            const withActiveProduct = appendAnalyzedProductAsActive(prev, analyzedProduct);
+            return setComparison(withActiveProduct, orchestration.comparison);
+          });
+        }
+
+        await streamAssistantText(
+          loadingId,
+          orchestration.assistantMessageText,
+          orchestration.structuredResult,
+          snapshot.thumbnailUri,
+          true
+        );
+      }
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === loadingId
+      setMessages((prev) => {
+        const loadingIndex = [...prev].reverse().findIndex((m) => m.isLoading && !m.isUser);
+        if (loadingIndex === -1) return prev;
+        const targetIndex = prev.length - 1 - loadingIndex;
+        return prev.map((m, idx) =>
+          idx === targetIndex
             ? { ...m, text: errMsg, isLoading: false }
             : m
-        )
-      );
+        );
+      });
     } finally {
       setIsSending(false);
     }
@@ -511,10 +574,6 @@ export default function HomeScreen() {
             <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
           </View>
         )}
-
-        {snapshots.length > 0 ? (
-          <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
-        ) : null}
 
         <Composer
           inputRef={inputRef}
