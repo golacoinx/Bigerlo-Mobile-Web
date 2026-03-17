@@ -48,6 +48,11 @@ const profileUpdateSchema = z.object({
   knownReactions: arrayFieldSchema.optional(),
 });
 
+
+const generalChatSchema = z.object({
+  message: z.string().trim().min(1).max(4000),
+});
+
 const productTypeSchema = z.enum([
   "cleanser",
   "serum",
@@ -262,6 +267,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Memory get error:", error);
       return res.status(500).json({ error: "Kişisel hafıza verisi alınamadı." });
+    }
+  });
+
+
+  app.post("/api/chat", async (req, res) => {
+    const parsed = generalChatSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    const clientKey = getClientThrottleKey(req);
+    const now = Date.now();
+    const lastCalledAt = lastGeminiCallByClient.get(clientKey) ?? 0;
+
+    if (now - lastCalledAt < THROTTLE_WINDOW_MS) {
+      const retryAfterMs = THROTTLE_WINDOW_MS - (now - lastCalledAt);
+      res.setHeader("Retry-After", Math.ceil(retryAfterMs / 1000));
+      return res.status(429).json({ error: "Lütfen kısa bir süre bekleyip tekrar deneyin." });
+    }
+
+    try {
+      lastGeminiCallByClient.set(clientKey, now);
+
+      const profile = await getProfileForClientIfExists(clientKey);
+      const payload = {
+        systemInstruction: {
+          parts: [
+            {
+              text:
+                "You are a helpful Turkish assistant. Give concise, safe, practical information. Avoid diagnosis or definitive medical treatment claims.",
+            },
+          ],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: parsed.data.message }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 1024,
+        },
+      };
+
+      const response = await fetch(
+        `${GEMINI_API_URL}?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const mappedError = mapGeminiErrorToHttpResponse(response.status);
+        return res.status(mappedError.status).json({ error: mappedError.error });
+      }
+
+      const data = (await response.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+
+      const text = sanitizeModelText(data) || "Şu an net bir yanıt üretemedim. Soruyu biraz daha detaylandırabilir misiniz?";
+      return res.json({ text, profileId: profile?.id });
+    } catch (error) {
+      console.error("General chat error:", error);
+      return res.status(500).json({ error: "Yanıt alınamadı." });
     }
   });
 

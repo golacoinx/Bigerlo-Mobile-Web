@@ -20,7 +20,6 @@ import {
   captureSnapshot,
   getBestPictureSize,
   pickSnapshotsFromLibrary,
-  type AnalyzeImage,
   type Snapshot,
 } from "@/lib/camera/snapshot-camera";
 import Colors from "@/constants/colors";
@@ -40,7 +39,7 @@ import {
   setComparison,
 } from "@/lib/session/analysis-session-store";
 import { getApiUrl } from "@/lib/query-client";
-import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
+import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
 
 const SCAN_BOX_SIZE = 280;
 
@@ -52,28 +51,6 @@ const ANALYSIS_TABS: { key: AnalysisTab; icon: keyof typeof Ionicons.glyphMap }[
   { key: "Risk", icon: "shield-checkmark-outline" },
   { key: "Fiyat", icon: "pricetag-outline" },
 ];
-
-async function analyzeWithGemini(
-  message: string,
-  images: AnalyzeImage[]
-): Promise<{ text: string; structured?: StructuredAnalysis }> {
-  const base = getApiUrl();
-  const url = new URL("/api/analyze", base).toString();
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, images }),
-  });
-
-  const data = (await response.json()) as AnalyzeApiResponse;
-
-  if (!response.ok) {
-    throw new Error(data.error ?? "İstek başarısız oldu.");
-  }
-
-  return { text: data.text ?? "Yanıt alınamadı.", structured: data.structured };
-}
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -272,10 +249,10 @@ export default function HomeScreen() {
     inputRef.current?.focus();
 
     try {
-      const response = await analyzeWithGemini(payloadMessage, images);
-      const orchestration = orchestrateInitialAnalysis({
+      const orchestration = await orchestrateInitialAnalysis({
         userInput: userInputPayload,
-        response,
+        payloadMessage,
+        images,
         existingAnalyzedProducts: analysisSessionState.analyzedProducts,
       });
 

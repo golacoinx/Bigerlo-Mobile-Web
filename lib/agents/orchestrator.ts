@@ -1,4 +1,5 @@
 import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
+import type { AnalyzeImage } from "@/lib/camera/snapshot-camera";
 import {
   buildAssistantAnalysisMessage,
   extractAnalysisResult,
@@ -7,6 +8,7 @@ import { buildComparisonResult } from "@/lib/agents/comparison-agent";
 import { classifyUserInput, type InputIntent } from "@/lib/agents/input-classifier";
 import { buildRiskResultFromAnalyzeResponse } from "@/lib/agents/risk-agent";
 import { sanitizeAssistantText } from "@/lib/agents/response-sanitizer";
+import { getApiUrl } from "@/lib/query-client";
 import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
 import type {
   AnalyzedProduct,
@@ -31,30 +33,62 @@ export type OrchestratorAnalyzeResult = {
   comparison: ComparisonResult | null;
 };
 
-export function orchestrateInitialAnalysis(args: {
+async function requestAnalyze(message: string, images: AnalyzeImage[]): Promise<AnalyzeApiResponse> {
+  const url = new URL("/api/analyze", getApiUrl()).toString();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, images }),
+  });
+
+  const data = (await response.json()) as AnalyzeApiResponse;
+  if (!response.ok) {
+    throw new Error(data.error ?? "İstek başarısız oldu.");
+  }
+
+  return data;
+}
+
+async function requestGeneralKnowledge(message: string): Promise<string> {
+  const url = new URL("/api/chat", getApiUrl()).toString();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+
+  const data = (await response.json()) as { text?: string; error?: string };
+  if (!response.ok) {
+    throw new Error(data.error ?? "Yanıt alınamadı.");
+  }
+
+  return sanitizeAssistantText(data.text);
+}
+
+export async function orchestrateInitialAnalysis(args: {
   userInput: UserInputPayload;
-  response: AnalyzeApiResponse;
+  payloadMessage: string;
+  images: AnalyzeImage[];
   existingAnalyzedProducts: AnalyzedProduct[];
-}): OrchestratorAnalyzeResult {
-  const { userInput, response, existingAnalyzedProducts } = args;
+}): Promise<OrchestratorAnalyzeResult> {
+  const { userInput, payloadMessage, images, existingAnalyzedProducts } = args;
 
   const mode = classifyUserInput(userInput);
-  const sanitizedResponseText = sanitizeAssistantText(response.text);
 
   if (mode === "general-chat") {
     return {
       mode,
-      assistantMessageText:
-        response.text?.trim() ? sanitizedResponseText : "Merhaba! Size nasıl yardımcı olabilirim?",
+      assistantMessageText: "Merhaba! Size nasıl yardımcı olabilirim?",
       structuredResult: undefined,
       comparison: null,
     };
   }
 
   if (mode === "general-knowledge") {
+    const text = await requestGeneralKnowledge(userInput.text?.trim() || payloadMessage);
     return {
       mode,
-      assistantMessageText: sanitizedResponseText,
+      assistantMessageText: text,
       structuredResult: undefined,
       comparison: null,
     };
@@ -68,6 +102,8 @@ export function orchestrateInitialAnalysis(args: {
       comparison: null,
     };
   }
+
+  const response = await requestAnalyze(payloadMessage, images);
 
   const analysisResult = extractAnalysisResult({
     responseText: response.text,
