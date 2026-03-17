@@ -1,37 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Colors from "@/constants/colors";
-import type {
-  CompatibilityResult,
-  PersonalMemorySignal,
-  StructuredAnalysis,
-} from "@/lib/chat/analysis-types";
-
-function getSuitabilityMeta(suitability: StructuredAnalysis["analysis"]["suitability"]) {
-  switch (suitability) {
-    case "good":
-      return { label: "Uygun Görünüyor", bg: "#D1FADF", fg: "#067647" };
-    case "caution":
-      return { label: "Dikkatli Kullanım", bg: "#FEF0C7", fg: "#B54708" };
-    case "avoid":
-      return { label: "Çok Uygun Değil", bg: "#FEE4E2", fg: "#B42318" };
-    default:
-      return { label: "Belirsiz", bg: Colors.cardInner, fg: Colors.textSecondary };
-  }
-}
-
-function getCompatibilityMeta(status: CompatibilityResult["status"]) {
-  switch (status) {
-    case "compatible":
-      return { icon: "✓", label: "Profilinle uyumlu görünüyor", bg: "#ECFDF3", fg: "#027A48" };
-    case "caution":
-      return { icon: "⚠", label: "Profilin için dikkat gerektiriyor", bg: "#FFFAEB", fg: "#B54708" };
-    case "conflict":
-      return { icon: "✕", label: "Profilinle çatışan içerik var", bg: "#FEF3F2", fg: "#B42318" };
-    default:
-      return { icon: "•", label: "Uyumluluk için daha fazla veri gerekli", bg: Colors.card, fg: Colors.textSecondary };
-  }
-}
+import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
 
 function formatProductType(type: StructuredAnalysis["product"]["type"]) {
   const map: Record<StructuredAnalysis["product"]["type"], string> = {
@@ -48,12 +18,17 @@ function formatProductType(type: StructuredAnalysis["product"]["type"]) {
   return map[type] ?? "Diğer";
 }
 
-function getMemorySignalMeta(direction: PersonalMemorySignal["direction"]) {
-  if (direction === "caution") {
-    return { icon: "⚠", color: "#B42318", label: "Önceki deneyimde dikkat" };
+function getShortVerdict(suitability: StructuredAnalysis["analysis"]["suitability"]) {
+  switch (suitability) {
+    case "good":
+      return "Genel kullanım için daha uygun görünüyor.";
+    case "caution":
+      return "Kademeli kullanımla ilerlemek daha güvenli olur.";
+    case "avoid":
+      return "Bu ürün sizin için güçlü bir aday olmayabilir.";
+    default:
+      return "Net karar için daha fazla kullanım bağlamı gerekli.";
   }
-
-  return { icon: "✓", color: "#027A48", label: "Önceki deneyimde olumlu" };
 }
 
 export function AnalysisResultCard({
@@ -64,92 +39,37 @@ export function AnalysisResultCard({
   onTrackProduct?: (structured: StructuredAnalysis) => void;
 }) {
   const { product, ingredients, analysis } = structured;
-  const suitability = getSuitabilityMeta(analysis.suitability);
-  const confidence = Math.max(0, Math.min(1, analysis.confidence || 0));
 
   const hasRealProductName = product.name && product.name.toLowerCase() !== "bilinmiyor";
   const hasRealBrand = product.brand && product.brand.toLowerCase() !== "bilinmiyor";
-  const hasRisks = analysis.risks.length > 0;
   const hasIngredients = ingredients.length > 0;
-  const compatibility = structured.compatibility;
-  const compatibilityMeta = getCompatibilityMeta(compatibility?.status ?? "unknown");
-  const memory = structured.memory;
-  const memoryMatches = memory?.matchedSignals ?? [];
-  const showMemorySection = memory?.status === "available" && memoryMatches.length > 0;
 
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.title}>
-            {hasRealProductName ? product.name : "Ürün analizi"}
-          </Text>
+          <Text style={styles.title}>{hasRealProductName ? product.name : "Ürün analizi"}</Text>
           <Text style={styles.subtitle}>
             {hasRealBrand ? product.brand : "Marka bilinmiyor"} · {formatProductType(product.type)}
           </Text>
         </View>
       </View>
 
-      <View style={[styles.compatibilityBox, { backgroundColor: compatibilityMeta.bg }]}> 
-        <Text style={[styles.compatibilityLabel, { color: compatibilityMeta.fg }]}> 
-          {compatibilityMeta.icon} Uyumluluk: {compatibilityMeta.label}
-        </Text>
-        {compatibility?.reasons?.slice(0, 2).map((reason, index) => (
-          <Text key={`reason-${index}`} style={[styles.compatibilityReason, { color: compatibilityMeta.fg }]}>• {reason}</Text>
-        ))}
-      </View>
-
-      <View style={[styles.suitabilityBadge, { backgroundColor: suitability.bg }]}> 
-        <Text style={[styles.suitabilityText, { color: suitability.fg }]}>{suitability.label}</Text>
-      </View>
-
-      {showMemorySection ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal memory</Text>
-          <Text style={styles.memorySummary}>
-            {memory.evidenceLevel === "limited"
-              ? "Bu sinyaller sınırlı geçmiş veriye dayanır."
-              : "Bu sinyaller takip geçmişinizde tekrar eden desenlere dayanır."}
-          </Text>
-          {memoryMatches.slice(0, 2).map((signal) => {
-            const meta = getMemorySignalMeta(signal.direction);
-            return (
-              <View key={`${signal.direction}-${signal.ingredient}`} style={styles.memorySignalItem}>
-                <Text style={[styles.memorySignalTitle, { color: meta.color }]}> 
-                  {meta.icon} {meta.label}: {signal.ingredient}
-                </Text>
-                <Text style={styles.memorySignalMessage}>{signal.message}</Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
-
       {analysis.summary ? <Text style={styles.summary}>{analysis.summary}</Text> : null}
 
-      {hasRisks ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dikkat Notları</Text>
-          <View style={styles.chipsWrap}>
-            {analysis.risks.slice(0, 4).map((risk, index) => (
-              <View key={`risk-${index}`} style={styles.riskChip}>
-                <Text style={styles.riskChipText}>{risk}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
       {hasIngredients ? (
-        <Text style={styles.ingredients} numberOfLines={3}>
-          İçerik: {ingredients.slice(0, 8).join(", ")}
+        <Text style={styles.ingredients} numberOfLines={2}>
+          Öne çıkan içerikler: {ingredients.slice(0, 6).join(", ")}
         </Text>
       ) : null}
 
-      {analysis.cautionNote ? <Text style={styles.caution}>{analysis.cautionNote}</Text> : null}
+      <Text style={styles.verdict}>{getShortVerdict(analysis.suitability)}</Text>
+
+      {(analysis.risks.length > 0 || analysis.cautionNote) ? (
+        <Text style={styles.riskHint}>Detaylı dikkat ve risk notları için Risk sekmesine bakın.</Text>
+      ) : null}
 
       <View style={styles.footerRow}>
-        <Text style={styles.confidence}>Güven düzeyi: %{Math.round(confidence * 100)}</Text>
         <TouchableOpacity
           style={[styles.ctaBtn, !onTrackProduct && styles.ctaBtnDisabled]}
           activeOpacity={0.8}
@@ -190,77 +110,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
-  compatibilityBox: {
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  compatibilityLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  compatibilityReason: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  suitabilityBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  suitabilityText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
   summary: {
     fontSize: 14,
     lineHeight: 20,
-    color: Colors.textPrimary,
-  },
-  memorySummary: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    lineHeight: 17,
-  },
-  memorySignalItem: {
-    borderRadius: 10,
-    backgroundColor: Colors.card,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  memorySignalTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  memorySignalMessage: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Colors.textSecondary,
-  },
-  section: {
-    gap: 6,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-  },
-  chipsWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  riskChip: {
-    borderRadius: 999,
-    backgroundColor: Colors.card,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  riskChipText: {
-    fontSize: 12,
     color: Colors.textPrimary,
   },
   ingredients: {
@@ -268,7 +120,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: Colors.textSecondary,
   },
-  caution: {
+  verdict: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.textPrimary,
+    fontWeight: "500",
+  },
+  riskHint: {
     fontSize: 12,
     lineHeight: 17,
     color: Colors.textSecondary,
@@ -277,12 +135,8 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     gap: 8,
-  },
-  confidence: {
-    fontSize: 12,
-    color: Colors.textSecondary,
   },
   ctaBtn: {
     borderRadius: 12,

@@ -74,6 +74,9 @@ export default function HomeScreen() {
     (product) => product.id === analysisSessionState.activeProductId
   );
   const activeRisk = activeProduct?.risk;
+  const lastAssistantText = [...messages]
+    .reverse()
+    .find((message) => !message.isUser && !message.isLoading)?.text;
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -254,6 +257,8 @@ export default function HomeScreen() {
         payloadMessage,
         images,
         existingAnalyzedProducts: analysisSessionState.analyzedProducts,
+        activeAnalyzedProduct: activeProduct,
+        lastAssistantText,
       });
 
       const analyzedProduct = orchestration.analyzedProduct;
@@ -283,7 +288,16 @@ export default function HomeScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [analysisSessionState.analyzedProducts, chatMode, inputText, isSending, snapshots, streamAssistantText]);
+  }, [
+    activeProduct,
+    analysisSessionState.analyzedProducts,
+    chatMode,
+    inputText,
+    isSending,
+    lastAssistantText,
+    snapshots,
+    streamAssistantText,
+  ]);
 
   const handleCameraReady = useCallback(async () => {
     try {

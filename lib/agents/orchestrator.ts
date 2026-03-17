@@ -65,13 +65,61 @@ async function requestGeneralKnowledge(message: string): Promise<string> {
   return sanitizeAssistantText(data.text);
 }
 
+function isLikelyFollowUpQuestion(text?: string): boolean {
+  const normalized = text?.trim().toLowerCase() ?? "";
+  if (!normalized) return false;
+
+  const short = normalized.split(/\s+/).length <= 8;
+  const cues = [
+    "peki",
+    "buna",
+    "bunda",
+    "alkol var mı",
+    "hassas ciltte",
+    "alternatif",
+    "kullanabilir miyim",
+    "hamilelikte",
+    "komedojenik mi",
+  ];
+
+  return short && cues.some((cue) => normalized.includes(cue));
+}
+
+function buildFollowUpAnalysisPrompt(args: {
+  userQuestion: string;
+  activeAnalyzedProduct: AnalyzedProduct;
+  lastAssistantText?: string;
+}): string {
+  const { userQuestion, activeAnalyzedProduct, lastAssistantText } = args;
+  const name = activeAnalyzedProduct.productDetection?.productName || "önceki ürün";
+  const brand = activeAnalyzedProduct.productDetection?.brand || "";
+  const summary = activeAnalyzedProduct.analysis?.summary || lastAssistantText || "";
+
+  return [
+    `Takip sorusu aynı ürün içindir: ${name}${brand ? ` (${brand})` : ""}.`,
+    summary ? `Önceki kısa değerlendirme: ${summary}` : "",
+    `Yeni soru: ${userQuestion}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export async function orchestrateInitialAnalysis(args: {
   userInput: UserInputPayload;
   payloadMessage: string;
   images: AnalyzeImage[];
   existingAnalyzedProducts: AnalyzedProduct[];
+  activeAnalyzedProduct?: AnalyzedProduct;
+  lastAssistantText?: string;
 }): Promise<OrchestratorAnalyzeResult> {
-  const { userInput, payloadMessage, images, existingAnalyzedProducts } = args;
+  const {
+    userInput,
+    payloadMessage,
+    images,
+    existingAnalyzedProducts,
+    activeAnalyzedProduct,
+    lastAssistantText,
+  } = args;
 
   const mode = classifyUserInput(userInput);
 
@@ -85,6 +133,48 @@ export async function orchestrateInitialAnalysis(args: {
   }
 
   if (mode === "general-knowledge") {
+    if (activeAnalyzedProduct && isLikelyFollowUpQuestion(userInput.text)) {
+      const response = await requestAnalyze(
+        buildFollowUpAnalysisPrompt({
+          userQuestion: userInput.text?.trim() || payloadMessage,
+          activeAnalyzedProduct,
+          lastAssistantText,
+        }),
+        []
+      );
+
+      const analysisResult = extractAnalysisResult({
+        responseText: response.text,
+        structured: response.structured,
+      });
+
+      const riskResult = buildRiskResultFromAnalyzeResponse({
+        response,
+        analysisResult,
+      });
+
+      const analyzedProduct = mapAnalyzeResponseToAnalyzedProduct({
+        response,
+        sourceInputId: userInput.id,
+        createdAt: userInput.createdAt,
+        analysisOverride: analysisResult,
+        riskOverride: riskResult,
+      });
+
+      const comparison = buildComparisonResult([
+        ...existingAnalyzedProducts,
+        analyzedProduct,
+      ]);
+
+      return {
+        mode: "product-analysis",
+        assistantMessageText: buildAssistantAnalysisMessage({ response, analysisResult }),
+        structuredResult: response.structured,
+        analyzedProduct,
+        comparison,
+      };
+    }
+
     const text = await requestGeneralKnowledge(userInput.text?.trim() || payloadMessage);
     return {
       mode,
@@ -103,7 +193,16 @@ export async function orchestrateInitialAnalysis(args: {
     };
   }
 
-  const response = await requestAnalyze(payloadMessage, images);
+  const analyzeMessage =
+    activeAnalyzedProduct && isLikelyFollowUpQuestion(userInput.text)
+      ? buildFollowUpAnalysisPrompt({
+          userQuestion: userInput.text?.trim() || payloadMessage,
+          activeAnalyzedProduct,
+          lastAssistantText,
+        })
+      : payloadMessage;
+
+  const response = await requestAnalyze(analyzeMessage, images);
 
   const analysisResult = extractAnalysisResult({
     responseText: response.text,
