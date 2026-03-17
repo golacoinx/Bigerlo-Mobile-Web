@@ -1,14 +1,10 @@
-import type { AnalyzeApiResponse } from "@/lib/chat/analysis-types";
+import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
 import {
   buildAssistantAnalysisMessage,
   extractAnalysisResult,
 } from "@/lib/agents/analysis-agent";
 import { buildComparisonResult } from "@/lib/agents/comparison-agent";
-import {
-  classifyUserInput,
-  type InputIntent,
-  hasUsableProductSignal,
-} from "@/lib/agents/input-classifier";
+import { classifyUserInput, type InputIntent } from "@/lib/agents/input-classifier";
 import { buildRiskResultFromAnalyzeResponse } from "@/lib/agents/risk-agent";
 import { sanitizeAssistantText } from "@/lib/agents/response-sanitizer";
 import { mapAnalyzeResponseToAnalyzedProduct } from "@/lib/session/analysis-session-mappers";
@@ -29,27 +25,11 @@ export type OrchestratorMode = InputIntent;
 
 export type OrchestratorAnalyzeResult = {
   mode: OrchestratorMode;
+  assistantMessageText: string;
+  structuredResult?: StructuredAnalysis;
   analyzedProduct?: AnalyzedProduct;
   comparison: ComparisonResult | null;
-  assistantMessageText: string;
-  shouldAttachStructuredResult: boolean;
-  rawResponse: AnalyzeApiResponse;
 };
-
-function hasMeaningfulAnalyzedProduct(product: AnalyzedProduct): boolean {
-  const hasProductSignal = Boolean(
-    product.productDetection?.productName ||
-      product.productDetection?.brand ||
-      product.productDetection?.category
-  );
-
-  const summary = product.analysis?.summary?.trim() ?? "";
-  const hasMeaningfulSummary = summary.length >= 12;
-
-  const hasIngredientSignal = (product.ingredientExtraction?.ingredients.length ?? 0) > 0;
-
-  return hasProductSignal || hasMeaningfulSummary || hasIngredientSignal;
-}
 
 export function orchestrateInitialAnalysis(args: {
   userInput: UserInputPayload;
@@ -64,31 +44,28 @@ export function orchestrateInitialAnalysis(args: {
   if (mode === "general-chat") {
     return {
       mode,
-      comparison: null,
       assistantMessageText:
         response.text?.trim() ? sanitizedResponseText : "Merhaba! Size nasıl yardımcı olabilirim?",
-      shouldAttachStructuredResult: false,
-      rawResponse: response,
+      structuredResult: undefined,
+      comparison: null,
     };
   }
 
   if (mode === "general-knowledge") {
     return {
       mode,
-      comparison: null,
       assistantMessageText: sanitizedResponseText,
-      shouldAttachStructuredResult: false,
-      rawResponse: response,
+      structuredResult: undefined,
+      comparison: null,
     };
   }
 
   if (mode === "unclear") {
     return {
       mode,
-      comparison: null,
       assistantMessageText: "Sorunuzu biraz daha netleştirebilir misiniz?",
-      shouldAttachStructuredResult: false,
-      rawResponse: response,
+      structuredResult: undefined,
+      comparison: null,
     };
   }
 
@@ -110,16 +87,6 @@ export function orchestrateInitialAnalysis(args: {
     riskOverride: riskResult,
   });
 
-  if (!hasMeaningfulAnalyzedProduct(analyzedProduct) && !hasUsableProductSignal(userInput)) {
-    return {
-      mode: "unclear",
-      comparison: null,
-      assistantMessageText: "Sorunuzu biraz daha netleştirebilir misiniz?",
-      shouldAttachStructuredResult: false,
-      rawResponse: response,
-    };
-  }
-
   const comparison = buildComparisonResult([
     ...existingAnalyzedProducts,
     analyzedProduct,
@@ -132,10 +99,9 @@ export function orchestrateInitialAnalysis(args: {
 
   return {
     mode,
+    assistantMessageText,
+    structuredResult: response.structured,
     analyzedProduct,
     comparison,
-    assistantMessageText,
-    shouldAttachStructuredResult: true,
-    rawResponse: response,
   };
 }

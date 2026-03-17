@@ -13,26 +13,6 @@ export function createInitialAnalysisSessionState(): AnalysisSessionState {
   };
 }
 
-export function addAnalyzedProduct(
-  state: AnalysisSessionState,
-  product: AnalyzedProduct
-): AnalysisSessionState {
-  return {
-    ...state,
-    analyzedProducts: [...state.analyzedProducts, product],
-  };
-}
-
-export function setActiveProductId(
-  state: AnalysisSessionState,
-  productId: string
-): AnalysisSessionState {
-  return {
-    ...state,
-    activeProductId: productId,
-  };
-}
-
 export function setComparison(
   state: AnalysisSessionState,
   comparison: ComparisonResult | null
