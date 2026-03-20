@@ -20,12 +20,10 @@ import {
   captureSnapshot,
   getBestPictureSize,
   pickSnapshotsFromLibrary,
-  type AnalyzeImage,
   type Snapshot,
 } from "@/lib/camera/snapshot-camera";
 import Colors from "@/constants/colors";
 import { MessageItem, type ChatMessage } from "@/components/chat/MessageItem";
-import { SnapshotStrip } from "@/components/chat/SnapshotStrip";
 import { Composer } from "@/components/chat/Composer";
 import { CameraBottomPanel } from "@/components/chat/CameraBottomPanel";
 import {
@@ -33,8 +31,14 @@ import {
   createUserMessage,
   getComposedMessageParts,
 } from "@/lib/chat/send-helpers";
+import { orchestrateInitialAnalysis, type UserInputPayload } from "@/lib/agents/orchestrator";
+import {
+  appendAnalyzedProductAsActive,
+  createInitialAnalysisSessionState,
+  setComparison,
+} from "@/lib/session/analysis-session-store";
 import { getApiUrl } from "@/lib/query-client";
-import type { AnalyzeApiResponse, StructuredAnalysis } from "@/lib/chat/analysis-types";
+import type { StructuredAnalysis } from "@/lib/chat/analysis-types";
 
 const SCAN_BOX_SIZE = 280;
 
@@ -47,28 +51,6 @@ const ANALYSIS_TABS: { key: AnalysisTab; icon: keyof typeof Ionicons.glyphMap }[
   { key: "Fiyat", icon: "pricetag-outline" },
 ];
 
-async function analyzeWithGemini(
-  message: string,
-  images: AnalyzeImage[]
-): Promise<{ text: string; structured?: StructuredAnalysis }> {
-  const base = getApiUrl();
-  const url = new URL("/api/analyze", base).toString();
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, images }),
-  });
-
-  const data = (await response.json()) as AnalyzeApiResponse;
-
-  if (!response.ok) {
-    throw new Error(data.error ?? "İstek başarısız oldu.");
-  }
-
-  return { text: data.text ?? "Yanıt alınamadı.", structured: data.structured };
-}
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [chatMode, setChatMode] = useState(false);
@@ -76,6 +58,7 @@ export default function HomeScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [analysisSessionState, setAnalysisSessionState] = useState(createInitialAnalysisSessionState());
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [cameraPictureSize, setCameraPictureSize] = useState<string | undefined>(undefined);
@@ -85,6 +68,14 @@ export default function HomeScreen() {
   const typingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCaptureRef = useRef<number>(0);
   const [permission, requestPermission] = useCameraPermissions();
+
+  const activeProduct = analysisSessionState.analyzedProducts.find(
+    (product) => product.id === analysisSessionState.activeProductId
+  );
+  const activeRisk = activeProduct?.risk;
+  const lastAssistantText = [...messages]
+    .reverse()
+    .find((message) => !message.isUser && !message.isLoading)?.text;
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
   const bottomPadding = Platform.OS === "web" ? 34 : insets.bottom;
@@ -107,8 +98,38 @@ export default function HomeScreen() {
   }, []);
 
   const streamAssistantText = useCallback(
-    (loadingId: string, fullText: string, structuredResult?: StructuredAnalysis) =>
+    (
+      loadingId: string,
+      fullText: string,
+      structuredResult?: StructuredAnalysis,
+      cardPhotoUri?: string,
+      hideTextWhenStructured = false,
+      isPhotoAnalysisCard = false,
+    ) =>
       new Promise<void>((resolve) => {
+        if (hideTextWhenStructured && structuredResult) {
+          if (typingTimerRef.current) {
+            clearInterval(typingTimerRef.current);
+            typingTimerRef.current = null;
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === loadingId
+                ? {
+                    ...m,
+                    text: "",
+                    isLoading: false,
+                    structuredResult,
+                    cardPhotoUri,
+                    isPhotoAnalysisCard,
+                  }
+                : m
+            )
+          );
+          resolve();
+          return;
+        }
+
         if (typingTimerRef.current) {
           clearInterval(typingTimerRef.current);
           typingTimerRef.current = null;
@@ -125,7 +146,13 @@ export default function HomeScreen() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === loadingId
-                ? { ...m, text: partial, isLoading: index < chars.length }
+                ? {
+                    ...m,
+                    text: partial,
+                    isLoading: index < chars.length,
+                    cardPhotoUri,
+                    isPhotoAnalysisCard,
+                  }
                 : m
             )
           );
@@ -137,7 +164,14 @@ export default function HomeScreen() {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === loadingId
-                  ? { ...m, text: fullText, isLoading: false, structuredResult }
+                  ? {
+                      ...m,
+                      text: hideTextWhenStructured && structuredResult ? "" : fullText,
+                      isLoading: false,
+                      structuredResult,
+                      cardPhotoUri,
+                      isPhotoAnalysisCard,
+                    }
                   : m
               )
             );
@@ -239,35 +273,112 @@ export default function HomeScreen() {
 
     const userMsg = createUserMessage(`${Date.now()}-user`, trimmedText, snapshots);
 
+    const userInputPayload: UserInputPayload = {
+      id: userMsg.id,
+      type: hasText && hasImages ? "text+image" : hasImages ? "image" : "text",
+      text: hasText ? payloadMessage : undefined,
+      imageUri: snapshots[0]?.uri,
+      createdAt: new Date().toISOString(),
+    };
+
     setMessages((prev) => [...prev, userMsg]);
 
-    const loadingId = `${Date.now()}-loading`;
-    const loadingMsg = createLoadingMessage(loadingId);
-
-    setMessages((prev) => [...prev, loadingMsg]);
     setIsSending(true);
     setInputText("");
+    const snapshotsToProcess = [...snapshots];
     setSnapshots([]);
     setCameraOpen(false);
     inputRef.current?.focus();
 
     try {
-      const response = await analyzeWithGemini(payloadMessage, images);
-      await streamAssistantText(loadingId, response.text, response.structured);
+      if (!hasImages) {
+        const loadingId = `${Date.now()}-loading`;
+        setMessages((prev) => [...prev, createLoadingMessage(loadingId)]);
+
+        const orchestration = await orchestrateInitialAnalysis({
+          userInput: userInputPayload,
+          payloadMessage,
+          images: [],
+          existingAnalyzedProducts: analysisSessionState.analyzedProducts,
+          activeAnalyzedProduct: activeProduct,
+          lastAssistantText,
+        });
+
+        await streamAssistantText(
+          loadingId,
+          orchestration.assistantMessageText,
+          undefined,
+          undefined,
+          false
+        );
+        return;
+      }
+
+      let localAnalyzedProducts = analysisSessionState.analyzedProducts;
+
+      for (let idx = 0; idx < snapshotsToProcess.length; idx += 1) {
+        const snapshot = snapshotsToProcess[idx];
+        const loadingId = `${Date.now()}-loading-${idx}`;
+        setMessages((prev) => [...prev, createLoadingMessage(loadingId)]);
+
+        const orchestration = await orchestrateInitialAnalysis({
+          userInput: {
+            ...userInputPayload,
+            id: `${userInputPayload.id}-img-${idx}`,
+            type: hasText ? "text+image" : "image",
+            imageUri: snapshot.uri,
+          },
+          payloadMessage,
+          images: [images[idx]],
+          existingAnalyzedProducts: localAnalyzedProducts,
+          activeAnalyzedProduct: activeProduct,
+          lastAssistantText,
+        });
+
+        const analyzedProduct = orchestration.analyzedProduct;
+        if (analyzedProduct) {
+          localAnalyzedProducts = [...localAnalyzedProducts, analyzedProduct];
+          setAnalysisSessionState((prev) => {
+            const withActiveProduct = appendAnalyzedProductAsActive(prev, analyzedProduct);
+            return setComparison(withActiveProduct, orchestration.comparison);
+          });
+        }
+
+        await streamAssistantText(
+          loadingId,
+          orchestration.assistantMessageText,
+          orchestration.structuredResult,
+          snapshot.thumbnailUri,
+          false,
+          true
+        );
+      }
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.";
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === loadingId
+      setMessages((prev) => {
+        const loadingIndex = [...prev].reverse().findIndex((m) => m.isLoading && !m.isUser);
+        if (loadingIndex === -1) return prev;
+        const targetIndex = prev.length - 1 - loadingIndex;
+        return prev.map((m, idx) =>
+          idx === targetIndex
             ? { ...m, text: errMsg, isLoading: false }
             : m
-        )
-      );
+        );
+      });
     } finally {
       setIsSending(false);
     }
-  }, [chatMode, inputText, isSending, snapshots, streamAssistantText]);
+  }, [
+    activeProduct,
+    analysisSessionState.analyzedProducts,
+    chatMode,
+    inputText,
+    isSending,
+    lastAssistantText,
+    snapshots,
+    streamAssistantText,
+  ]);
 
   const handleCameraReady = useCallback(async () => {
     try {
@@ -286,6 +397,7 @@ export default function HomeScreen() {
     setChatMode(false);
     setSnapshots([]);
     setCameraOpen(false);
+    setAnalysisSessionState(createInitialAnalysisSessionState());
   }, []);
 
   const handleTrackProduct = useCallback(async (structured: StructuredAnalysis) => {
@@ -328,6 +440,45 @@ export default function HomeScreen() {
     ),
     [handleTrackProduct]
   );
+
+  const renderRiskList = useCallback((title: string, items: string[]) => {
+    if (!items.length) return null;
+
+    return (
+      <View style={styles.riskSection}>
+        <Text style={styles.riskSectionTitle}>{title}</Text>
+        {items.map((item, idx) => (
+          <Text key={`${title}-${idx}`} style={styles.riskItem}>
+            • {item}
+          </Text>
+        ))}
+      </View>
+    );
+  }, []);
+
+  const hasRiskContent = Boolean(
+    activeRisk &&
+      (activeRisk.risks.length > 0 ||
+        activeRisk.warnings.length > 0 ||
+        activeRisk.personalCautions.length > 0)
+  );
+
+  const activeComparison = analysisSessionState.comparison;
+  const leftComparisonProduct = activeComparison
+    ? analysisSessionState.analyzedProducts.find(
+        (product) => product.id === activeComparison.leftProductId
+      )
+    : undefined;
+  const rightComparisonProduct = activeComparison
+    ? analysisSessionState.analyzedProducts.find(
+        (product) => product.id === activeComparison.rightProductId
+      )
+    : undefined;
+
+  const leftComparisonName =
+    leftComparisonProduct?.productDetection?.productName?.trim() || "Ürün 1";
+  const rightComparisonName =
+    rightComparisonProduct?.productDetection?.productName?.trim() || "Ürün 2";
 
   return (
     <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
@@ -402,15 +553,43 @@ export default function HomeScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           />
+        ) : activeAnalysisTab === "Karşılaştırma" ? (
+          activeComparison ? (
+            <View style={styles.comparisonTabContainer}>
+              <Text style={styles.comparisonTitle}>{leftComparisonName} ↔ {rightComparisonName}</Text>
+              <Text style={styles.comparisonLine}>
+                Güvenlik: {activeComparison.winnerByCategory.safety ?? "tie"}
+              </Text>
+              <Text style={styles.comparisonLine}>
+                Uygunluk: {activeComparison.winnerByCategory.suitability ?? "tie"}
+              </Text>
+              <Text style={styles.comparisonLine}>
+                Değer: {activeComparison.winnerByCategory.value ?? "tie"}
+              </Text>
+              <Text style={styles.comparisonSummary}>{activeComparison.summary}</Text>
+            </View>
+          ) : (
+            <View style={styles.placeholderTabContainer}>
+              <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
+            </View>
+          )
+        ) : activeAnalysisTab === "Risk" ? (
+          hasRiskContent && activeRisk ? (
+            <View style={styles.riskTabContainer}>
+              {renderRiskList("Risk Sinyalleri", activeRisk.risks)}
+              {renderRiskList("Uyarılar", activeRisk.warnings)}
+              {renderRiskList("Kişisel Dikkat Notları", activeRisk.personalCautions)}
+            </View>
+          ) : (
+            <View style={styles.placeholderTabContainer}>
+              <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
+            </View>
+          )
         ) : (
           <View style={styles.placeholderTabContainer}>
             <Text style={styles.placeholderTabTitle}>{activeAnalysisTab}</Text>
           </View>
         )}
-
-        {snapshots.length > 0 ? (
-          <SnapshotStrip snapshots={snapshots} onRemove={removeSnapshot} />
-        ) : null}
 
         <Composer
           inputRef={inputRef}
@@ -642,6 +821,52 @@ const styles = StyleSheet.create({
   placeholderTabTitle: {
     fontSize: 18,
     fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  comparisonTabContainer: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  comparisonTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  comparisonLine: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.textPrimary,
+  },
+  comparisonSummary: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.textSecondary,
+  },
+  riskTabContainer: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  riskSection: {
+    gap: 6,
+  },
+  riskSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  riskItem: {
+    fontSize: 14,
+    lineHeight: 20,
     color: Colors.textPrimary,
   },
 
